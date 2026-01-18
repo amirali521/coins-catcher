@@ -16,6 +16,7 @@ import {
 } from 'firebase/auth';
 import { auth, db } from '@/firebase/init';
 import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection } from 'firebase/firestore';
+import { isToday, isYesterday } from 'date-fns';
 
 interface User {
   uid: string;
@@ -25,7 +26,10 @@ interface User {
   coins: number;
   referralCode: string;
   admin: boolean;
-  lastClaimTimestamp?: { seconds: number; nanoseconds: number; } | null;
+  lastClaimTimestamp?: { seconds: number; nanoseconds: number; } | null; // Hourly
+  dailyStreakCount: number;
+  lastDailyClaim: { seconds: number; nanoseconds: number; } | null;
+  lastFaucetClaimTimestamp?: { seconds: number; nanoseconds: number; } | null;
 }
 
 interface AuthContextType {
@@ -35,11 +39,12 @@ interface AuthContextType {
   login: (email: string, password?: string) => Promise<void>;
   signup: (name: string, email: string, password?: string, referralCode?: string | null) => Promise<{ referred: boolean }>;
   logout: () => void;
-  updateCoins: (newCoins: number) => Promise<void>;
-  claimReward: (amount: number) => Promise<void>;
   signInWithGoogle: (referralCode?: string | null) => Promise<{ referred: boolean }>;
   sendVerificationEmail: () => Promise<void>;
   sendPasswordResetEmail: (email: string) => Promise<void>;
+  claimHourlyReward: (amount: number) => Promise<void>;
+  claimFaucetReward: (amount: number) => Promise<void>;
+  claimDailyReward: () => Promise<{ amount: number; newStreak: number }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -67,6 +72,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               referralCode: userData.referralCode,
               admin: userData.admin || false,
               lastClaimTimestamp: userData.lastClaimTimestamp || null,
+              dailyStreakCount: userData.dailyStreakCount || 0,
+              lastDailyClaim: userData.lastDailyClaim || null,
+              lastFaucetClaimTimestamp: userData.lastFaucetClaimTimestamp || null,
             });
           }
           // If doc doesn't exist, it will be created on signup/google sign-in
@@ -131,6 +139,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         admin: false,
         createdAt: serverTimestamp(),
         lastClaimTimestamp: null,
+        dailyStreakCount: 0,
+        lastDailyClaim: null,
+        lastFaucetClaimTimestamp: null,
       });
     }
     return { referred };
@@ -168,6 +179,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       admin: false,
       createdAt: serverTimestamp(),
       lastClaimTimestamp: null,
+      dailyStreakCount: 0,
+      lastDailyClaim: null,
+      lastFaucetClaimTimestamp: null,
     });
 
     await sendEmailVerification(fbUser);
@@ -178,14 +192,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await firebaseSignOut(auth);
   };
 
-  const updateCoins = async (newCoins: number) => {
-    if (user) {
-      const userRef = doc(db, 'users', user.uid);
-      await updateDoc(userRef, { coins: newCoins });
-    }
-  };
-
-  const claimReward = async (amount: number) => {
+  const claimHourlyReward = async (amount: number) => {
     if (user) {
       const userRef = doc(db, 'users', user.uid);
       await updateDoc(userRef, {
@@ -194,6 +201,56 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
     }
   };
+
+  const claimFaucetReward = async (amount: number) => {
+    if (user) {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        coins: increment(amount),
+        lastFaucetClaimTimestamp: serverTimestamp(),
+      });
+    }
+  };
+
+  const DAILY_REWARDS = [15, 30, 45, 60, 75, 90, 120];
+
+  const claimDailyReward = async () => {
+    if (!user) throw new Error("User not authenticated");
+
+    const userRef = doc(db, 'users', user.uid);
+    // Use the user state which is real-time
+    const lastClaimDate = user.lastDailyClaim ? new Date(user.lastDailyClaim.seconds * 1000) : null;
+    
+    if (lastClaimDate && isToday(lastClaimDate)) {
+        throw new Error("Daily reward already claimed for today.");
+    }
+
+    let currentStreak = user.dailyStreakCount || 0;
+    
+    if (lastClaimDate && isYesterday(lastClaimDate)) {
+        // Continue streak
+        currentStreak++;
+    } else {
+        // Reset streak if last claim wasn't yesterday (or if it's the first claim)
+        currentStreak = 1;
+    }
+    
+    // Reset after 7 days
+    if (currentStreak > 7) {
+        currentStreak = 1;
+    }
+    
+    const rewardAmount = DAILY_REWARDS[currentStreak - 1];
+
+    await updateDoc(userRef, {
+        coins: increment(rewardAmount),
+        dailyStreakCount: currentStreak,
+        lastDailyClaim: serverTimestamp(),
+    });
+    
+    return { amount: rewardAmount, newStreak: currentStreak };
+  };
+
   
   const sendVerificationEmail = async () => {
     if (auth.currentUser) {
@@ -207,7 +264,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await firebaseSendPasswordResetEmail(auth, email);
   };
 
-  const value = { user, firebaseUser, loading, login, signup, logout, updateCoins, claimReward, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail };
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward };
 
   return (
     <AuthContext.Provider value={value}>

@@ -6,47 +6,84 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Gift, Clock, Coins } from "lucide-react";
+import { Gift, Clock, Coins, CheckCircle } from "lucide-react";
 import { BannerAd } from "@/components/ads/banner-ad";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { isToday } from "date-fns";
+import { cn } from "@/lib/utils";
 
-const CLAIM_COOLDOWN_HOURS = 3;
-const CLAIM_AMOUNT = 100;
+const HOURLY_CLAIM_COOLDOWN_HOURS = 3;
+const HOURLY_CLAIM_AMOUNT = 100;
+const FAUCET_CLAIM_COOLDOWN_HOURS = 3;
+const FAUCET_CLAIM_AMOUNT = 50;
+const DAILY_REWARDS = [15, 30, 45, 60, 75, 90, 120];
+
 
 export default function DashboardPage() {
-  const { user, claimReward } = useAuth();
+  const { user, claimHourlyReward, claimFaucetReward, claimDailyReward } = useAuth();
   const { toast } = useToast();
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [canClaim, setCanClaim] = useState(false);
   const [faucetPopoverOpen, setFaucetPopoverOpen] = useState(false);
   const [faucetAdClicked, setFaucetAdClicked] = useState(false);
 
+  const [hourlyTimeLeft, setHourlyTimeLeft] = useState<number | null>(null);
+  const [canClaimHourly, setCanClaimHourly] = useState(false);
+  const [faucetTimeLeft, setFaucetTimeLeft] = useState<number | null>(null);
+  const [canClaimFaucet, setCanClaimFaucet] = useState(false);
+  const [canClaimDaily, setCanClaimDaily] = useState(false);
 
-  const calculateTimeLeft = useCallback(() => {
-    if (user?.lastClaimTimestamp) {
-      const now = new Date().getTime();
-      const lastClaimTime = new Date(user.lastClaimTimestamp.seconds * 1000).getTime();
-      const cooldownMs = CLAIM_COOLDOWN_HOURS * 60 * 60 * 1000;
-      const nextClaimTime = lastClaimTime + cooldownMs;
 
-      if (now >= nextClaimTime) {
-        setCanClaim(true);
-        setTimeLeft(0);
-      } else {
-        setCanClaim(false);
-        setTimeLeft(nextClaimTime - now);
-      }
+  const calculateCooldowns = useCallback(() => {
+    if (!user) return;
+    const now = new Date().getTime();
+
+    // Hourly Reward
+    if (user.lastClaimTimestamp) {
+        const lastClaimTime = new Date(user.lastClaimTimestamp.seconds * 1000).getTime();
+        const cooldownMs = HOURLY_CLAIM_COOLDOWN_HOURS * 60 * 60 * 1000;
+        const nextClaimTime = lastClaimTime + cooldownMs;
+        if (now >= nextClaimTime) {
+            setCanClaimHourly(true);
+            setHourlyTimeLeft(0);
+        } else {
+            setCanClaimHourly(false);
+            setHourlyTimeLeft(nextClaimTime - now);
+        }
     } else {
-      setCanClaim(true);
-      setTimeLeft(0);
+        setCanClaimHourly(true);
+        setHourlyTimeLeft(0);
+    }
+
+    // Faucet Reward
+    if (user.lastFaucetClaimTimestamp) {
+        const lastClaimTime = new Date(user.lastFaucetClaimTimestamp.seconds * 1000).getTime();
+        const cooldownMs = FAUCET_CLAIM_COOLDOWN_HOURS * 60 * 60 * 1000;
+        const nextClaimTime = lastClaimTime + cooldownMs;
+        if (now >= nextClaimTime) {
+            setCanClaimFaucet(true);
+            setFaucetTimeLeft(0);
+        } else {
+            setCanClaimFaucet(false);
+            setFaucetTimeLeft(nextClaimTime - now);
+        }
+    } else {
+        setCanClaimFaucet(true);
+        setFaucetTimeLeft(0);
+    }
+    
+    // Daily Reward
+    if (user.lastDailyClaim) {
+        const lastClaimDate = new Date(user.lastDailyClaim.seconds * 1000);
+        setCanClaimDaily(!isToday(lastClaimDate));
+    } else {
+        setCanClaimDaily(true);
     }
   }, [user]);
 
   useEffect(() => {
-    calculateTimeLeft();
-    const timer = setInterval(calculateTimeLeft, 1000);
+    calculateCooldowns();
+    const timer = setInterval(calculateCooldowns, 1000);
     return () => clearInterval(timer);
-  }, [calculateTimeLeft]);
+  }, [calculateCooldowns]);
 
   const formatTime = (ms: number | null) => {
     if (ms === null || ms <= 0) return "00:00:00";
@@ -57,33 +94,13 @@ export default function DashboardPage() {
     return `${hours}:${minutes}:${seconds}`;
   };
 
-  const handleClaim = async () => {
-    if (canClaim && user) {
+  const handleHourlyClaim = async () => {
+    if (canClaimHourly && user) {
       try {
-        await claimReward(CLAIM_AMOUNT);
+        await claimHourlyReward(HOURLY_CLAIM_AMOUNT);
         toast({
           title: "🎉 Reward Claimed!",
-          description: `You have received ${CLAIM_AMOUNT} coins.`,
-        });
-        window.open('https://adsterra.com/', '_blank');
-      } catch (error) {
-        console.error("Failed to claim reward:", error);
-        toast({
-            variant: "destructive",
-            title: "Claim Failed",
-            description: "There was an issue claiming your reward. Please try again later.",
-        });
-      }
-    }
-  };
-
-  const handleBonusClaim = async (amount: number) => {
-    if (canClaim && user) {
-       try {
-        await claimReward(amount);
-        toast({
-          title: "🎉 Reward Claimed!",
-          description: `You have received ${amount} coins.`,
+          description: `You have received ${HOURLY_CLAIM_AMOUNT} coins.`,
         });
         window.open('https://adsterra.com/', '_blank');
       } catch (error) {
@@ -104,28 +121,58 @@ export default function DashboardPage() {
   };
 
   const handleFaucetClaim = async () => {
-    if (user && faucetAdClicked && canClaim) {
+    if (user && faucetAdClicked && canClaimFaucet) {
       try {
-        await claimReward(50);
+        await claimFaucetReward(FAUCET_CLAIM_AMOUNT);
         toast({
           title: "🎉 Faucet Reward Claimed!",
-          description: `You have received 50 coins.`,
+          description: `You have received ${FAUCET_CLAIM_AMOUNT} coins.`,
         });
         setFaucetPopoverOpen(false);
          // Reset for next time after a short delay
         setTimeout(() => {
           setFaucetAdClicked(false);
         }, 100);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to claim faucet reward:", error);
         toast({
             variant: "destructive",
             title: "Claim Failed",
-            description: "There was an issue claiming your reward. Please try again later.",
+            description: error.message || "There was an issue claiming your reward. Please try again later.",
         });
       }
     }
   };
+
+  const handleDailyClaim = async () => {
+      if(user && canClaimDaily) {
+          try {
+              const { amount, newStreak } = await claimDailyReward();
+              toast({
+                  title: `🎉 Day ${newStreak} Reward Claimed!`,
+                  description: `You received ${amount} coins. Keep up the streak!`,
+              });
+          } catch(error: any) {
+              toast({
+                variant: "destructive",
+                title: "Claim Failed",
+                description: error.message || "Could not claim daily reward.",
+              });
+          }
+      }
+  }
+
+  const currentStreak = user?.dailyStreakCount || 0;
+  const lastDailyClaimDate = user?.lastDailyClaim ? new Date(user.lastDailyClaim.seconds * 1000) : null;
+  const isClaimedToday = lastDailyClaimDate ? isToday(lastDailyClaimDate) : false;
+  
+  // This logic determines which day is the next to be claimed for the UI
+  let nextClaimDay;
+  if (isClaimedToday) {
+      nextClaimDay = (currentStreak % 7) + 1;
+  } else {
+      nextClaimDay = currentStreak + 1;
+  }
 
 
   return (
@@ -142,23 +189,23 @@ export default function DashboardPage() {
             <span>Hourly Reward</span>
           </CardTitle>
           <CardDescription>
-            Claim your free coins every {CLAIM_COOLDOWN_HOURS} hours.
+            Claim your free coins every {HOURLY_CLAIM_COOLDOWN_HOURS} hours.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col flex-1 items-center justify-center gap-6">
           <div className="text-center">
-            {canClaim ? (
+            {canClaimHourly ? (
               <>
                 <p className="text-lg text-muted-foreground">Your reward is ready!</p>
                 <p className="text-5xl font-bold text-primary flex items-center justify-center gap-2">
-                  <Coins className="h-10 w-10"/> {CLAIM_AMOUNT}
+                  <Coins className="h-10 w-10"/> {HOURLY_CLAIM_AMOUNT}
                 </p>
               </>
             ) : (
               <>
                 <p className="text-lg text-muted-foreground">Next claim in:</p>
                 <p className="text-5xl font-bold font-mono text-foreground flex items-center justify-center gap-2">
-                  <Clock className="h-10 w-10"/> {formatTime(timeLeft)}
+                  <Clock className="h-10 w-10"/> {formatTime(hourlyTimeLeft)}
                 </p>
               </>
             )}
@@ -166,10 +213,10 @@ export default function DashboardPage() {
           <Button
             size="lg"
             className="w-full max-w-xs text-lg py-6 transition-transform duration-200 hover:scale-105"
-            onClick={handleClaim}
-            disabled={!canClaim}
+            onClick={handleHourlyClaim}
+            disabled={!canClaimHourly}
           >
-            {canClaim ? "Claim Now" : "Come Back Later"}
+            {canClaimHourly ? "Claim Now" : "Come Back Later"}
           </Button>
         </CardContent>
       </Card>
@@ -186,45 +233,39 @@ export default function DashboardPage() {
 
       <Card className="md:col-span-2">
         <CardHeader>
-          <CardTitle>Bonus Rewards</CardTitle>
-          <CardDescription>Claim extra coins instantly by watching an ad.</CardDescription>
+            <CardTitle>Weekly Streak</CardTitle>
+            <CardDescription>Claim a reward every day. The more you claim in a row, the bigger the reward!</CardDescription>
         </CardHeader>
-        <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-           <Button
-              size="lg"
-              className="w-full text-lg py-8 flex flex-col h-auto transition-transform duration-200 hover:scale-105"
-              onClick={() => handleBonusClaim(20)}
-              disabled={!canClaim}
+        <CardContent>
+            <div className="grid grid-cols-4 md:grid-cols-7 gap-2 md:gap-4 text-center">
+                {DAILY_REWARDS.map((reward, index) => {
+                    const dayNumber = index + 1;
+                    const isCompleted = isClaimedToday ? dayNumber <= currentStreak : dayNumber <= currentStreak;
+                    const isTodayToClaim = !isClaimedToday && dayNumber === nextClaimDay;
+
+                    return (
+                        <div key={dayNumber} className={cn(
+                            "rounded-lg p-3 flex flex-col items-center justify-center border",
+                             isCompleted && dayNumber !== nextClaimDay ? "bg-primary/20 border-primary/50" : "bg-muted/50",
+                             isTodayToClaim && "border-primary ring-2 ring-primary/50"
+                        )}>
+                            <p className="text-xs text-muted-foreground">Day {dayNumber}</p>
+                             <div className="flex items-center gap-1 font-bold text-xl my-1">
+                                <Coins className="h-5 w-5 text-yellow-400" />
+                                <span>{reward}</span>
+                            </div>
+                            {isCompleted && dayNumber !== nextClaimDay && <CheckCircle className="h-5 w-5 text-primary" />}
+                        </div>
+                    )
+                })}
+            </div>
+             <Button
+                size="lg"
+                className="w-full mt-6"
+                onClick={handleDailyClaim}
+                disabled={!canClaimDaily}
             >
-              <div className="flex items-center gap-2">
-                <Coins className="h-6 w-6"/>
-                <span className="text-2xl font-bold">20</span>
-              </div>
-              <span className="text-sm font-normal mt-1">Claim Coins</span>
-            </Button>
-            <Button
-              size="lg"
-              className="w-full text-lg py-8 flex flex-col h-auto transition-transform duration-200 hover:scale-105"
-              onClick={() => handleBonusClaim(30)}
-              disabled={!canClaim}
-            >
-              <div className="flex items-center gap-2">
-                <Coins className="h-6 w-6"/>
-                <span className="text-2xl font-bold">30</span>
-              </div>
-              <span className="text-sm font-normal mt-1">Claim Coins</span>
-            </Button>
-            <Button
-              size="lg"
-              className="w-full text-lg py-8 flex flex-col h-auto transition-transform duration-200 hover:scale-105"
-              onClick={() => handleBonusClaim(30)}
-              disabled={!canClaim}
-            >
-               <div className="flex items-center gap-2">
-                <Coins className="h-6 w-6"/>
-                <span className="text-2xl font-bold">30</span>
-              </div>
-              <span className="text-sm font-normal mt-1">Claim Coins</span>
+                {canClaimDaily ? `Claim Day ${nextClaimDay} Reward` : "Come back tomorrow"}
             </Button>
         </CardContent>
       </Card>
@@ -232,7 +273,7 @@ export default function DashboardPage() {
       <Card className="md:col-span-2">
         <CardHeader>
             <CardTitle>Faucet Reward</CardTitle>
-            <CardDescription>Complete a simple task to earn a special reward.</CardDescription>
+            <CardDescription>Complete a simple task to earn a special reward. Cooldown is separate from the hourly reward.</CardDescription>
         </CardHeader>
         <CardContent className="flex items-center justify-center pt-4">
             <Popover open={faucetPopoverOpen} onOpenChange={(open) => {
@@ -249,7 +290,7 @@ export default function DashboardPage() {
                         className="w-full max-w-xs text-lg py-6 transition-transform duration-200 hover:scale-105 border-primary/50 text-primary hover:bg-primary/10 hover:text-primary"
                     >
                         <Coins className="mr-2 h-6 w-6"/>
-                        Claim 50 Coins Faucet
+                        Claim {FAUCET_CLAIM_AMOUNT} Coins Faucet
                     </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-80" align="center">
@@ -271,12 +312,12 @@ export default function DashboardPage() {
                                 <p className="text-muted-foreground text-xs mt-1">Click here to unlock your reward</p>
                             </div>
                         </div>
-                        <Button onClick={handleFaucetClaim} disabled={!faucetAdClicked || !canClaim}>
+                        <Button onClick={handleFaucetClaim} disabled={!faucetAdClicked || !canClaimFaucet}>
                             <Gift className="mr-2 h-4 w-4" />
-                            {!canClaim 
-                                ? "Reward on cooldown" 
+                            {!canClaimFaucet
+                                ? `Claim in ${formatTime(faucetTimeLeft)}`
                                 : faucetAdClicked 
-                                    ? "Claim 50 Coins" 
+                                    ? `Claim ${FAUCET_CLAIM_AMOUNT} Coins`
                                     : "Waiting for ad click..."
                             }
                         </Button>
