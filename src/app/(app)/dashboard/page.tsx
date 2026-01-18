@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -304,7 +305,7 @@ export default function DashboardPage() {
                             onClick={handleFaucetAdClick}
                             role="button"
                             tabIndex={0}
-                            className="cursor-pointer"
+                            className="cursor-pointer flex justify-center"
                         >
                             <FaucetBannerAd />
                         </div>
@@ -328,4 +329,5 @@ export default function DashboardPage() {
       </div>
     </div>
   );
-}
+
+    
