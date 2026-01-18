@@ -71,6 +71,20 @@ export default function DashboardPage() {
     }
   };
 
+  const handleBonusClaim = async (amount: number) => {
+    if (user) {
+      await updateCoins(user.coins + amount);
+      
+      toast({
+        title: "🎉 Reward Claimed!",
+        description: `You have received ${amount} coins.`,
+      });
+
+      // Simulate Popunder ad
+      window.open('https://adsterra.com/', '_blank');
+    }
+  };
+
   return (
     <div className="grid gap-6 md:grid-cols-2">
       <div className="md:col-span-2">
@@ -124,6 +138,48 @@ export default function DashboardPage() {
         <CardContent className="flex items-center justify-center text-6xl font-bold text-primary gap-4">
           <Coins className="h-16 w-16" />
           <span>{user?.coins?.toLocaleString() ?? 0}</span>
+        </CardContent>
+      </Card>
+
+      <Card className="md:col-span-2">
+        <CardHeader>
+          <CardTitle>Bonus Rewards</CardTitle>
+          <CardDescription>Claim extra coins instantly by watching an ad.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+           <Button
+              size="lg"
+              className="w-full text-lg py-8 flex flex-col h-auto transition-transform duration-200 hover:scale-105"
+              onClick={() => handleBonusClaim(20)}
+            >
+              <div className="flex items-center gap-2">
+                <Coins className="h-6 w-6"/>
+                <span className="text-2xl font-bold">20</span>
+              </div>
+              <span className="text-sm font-normal mt-1">Claim Coins</span>
+            </Button>
+            <Button
+              size="lg"
+              className="w-full text-lg py-8 flex flex-col h-auto transition-transform duration-200 hover:scale-105"
+              onClick={() => handleBonusClaim(30)}
+            >
+              <div className="flex items-center gap-2">
+                <Coins className="h-6 w-6"/>
+                <span className="text-2xl font-bold">30</span>
+              </div>
+              <span className="text-sm font-normal mt-1">Claim Coins</span>
+            </Button>
+            <Button
+              size="lg"
+              className="w-full text-lg py-8 flex flex-col h-auto transition-transform duration-200 hover:scale-105"
+              onClick={() => handleBonusClaim(30)}
+            >
+               <div className="flex items-center gap-2">
+                <Coins className="h-6 w-6"/>
+                <span className="text-2xl font-bold">30</span>
+              </div>
+              <span className="text-sm font-normal mt-1">Claim Coins</span>
+            </Button>
         </CardContent>
       </Card>
 
