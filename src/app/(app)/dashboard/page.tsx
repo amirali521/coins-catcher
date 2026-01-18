@@ -8,6 +8,7 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Gift, Clock, Coins } from "lucide-react";
 import { BannerAd } from "@/components/ads/banner-ad";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const CLAIM_COOLDOWN_HOURS = 3;
 const CLAIM_AMOUNT = 100;
@@ -17,6 +18,9 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [canClaim, setCanClaim] = useState(false);
+  const [faucetPopoverOpen, setFaucetPopoverOpen] = useState(false);
+  const [faucetAdClicked, setFaucetAdClicked] = useState(false);
+
 
   const calculateTimeLeft = useCallback(() => {
     const lastClaimTimestamp = localStorage.getItem('lastClaimTimestamp');
@@ -84,6 +88,30 @@ export default function DashboardPage() {
       window.open('https://adsterra.com/', '_blank');
     }
   };
+
+  const handleFaucetAdClick = () => {
+    setFaucetAdClicked(true);
+    // Simulate Popunder ad
+    window.open('https://adsterra.com/', '_blank');
+  };
+
+  const handleFaucetClaim = async () => {
+    if (user && faucetAdClicked) {
+      await updateCoins(user.coins + 50);
+      
+      toast({
+        title: "🎉 Faucet Reward Claimed!",
+        description: `You have received 50 coins.`,
+      });
+      
+      setFaucetPopoverOpen(false);
+       // Reset for next time after a short delay
+      setTimeout(() => {
+        setFaucetAdClicked(false);
+      }, 100);
+    }
+  };
+
 
   return (
     <div className="grid gap-6 md:grid-cols-2">
@@ -180,6 +208,58 @@ export default function DashboardPage() {
               </div>
               <span className="text-sm font-normal mt-1">Claim Coins</span>
             </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="md:col-span-2">
+        <CardHeader>
+            <CardTitle>Faucet Reward</CardTitle>
+            <CardDescription>Complete a simple task to earn a special reward.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex items-center justify-center pt-4">
+            <Popover open={faucetPopoverOpen} onOpenChange={(open) => {
+              setFaucetPopoverOpen(open);
+              // Reset ad click state when popover is closed manually
+              if (!open) {
+                setFaucetAdClicked(false);
+              }
+            }}>
+                <PopoverTrigger asChild>
+                    <Button
+                        size="lg"
+                        variant="outline"
+                        className="w-full max-w-xs text-lg py-6 transition-transform duration-200 hover:scale-105 border-primary/50 text-primary hover:bg-primary/10 hover:text-primary"
+                    >
+                        <Coins className="mr-2 h-6 w-6"/>
+                        Claim 50 Coins Faucet
+                    </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-80" align="center">
+                    <div className="grid gap-4">
+                        <div className="space-y-1">
+                            <h4 className="font-medium leading-none">Click the ad to claim</h4>
+                            <p className="text-sm text-muted-foreground">
+                            Click the banner below, then you can claim your reward.
+                            </p>
+                        </div>
+                        <div 
+                            className="rounded-md border-2 border-dashed border-primary/50 cursor-pointer hover:border-primary bg-muted/20 transition-colors"
+                            onClick={handleFaucetAdClick}
+                            role="button"
+                            tabIndex={0}
+                        >
+                            <div className="p-4 flex flex-col items-center justify-center h-28 text-center">
+                                <p className="font-semibold text-primary text-lg">Banner Ad</p>
+                                <p className="text-muted-foreground text-xs mt-1">Click here to unlock your reward</p>
+                            </div>
+                        </div>
+                        <Button onClick={handleFaucetClaim} disabled={!faucetAdClicked}>
+                            <Gift className="mr-2 h-4 w-4" />
+                            {faucetAdClicked ? "Claim 50 Coins" : "Waiting for ad click..."}
+                        </Button>
+                    </div>
+                </PopoverContent>
+            </Popover>
         </CardContent>
       </Card>
 
