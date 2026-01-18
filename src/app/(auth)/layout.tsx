@@ -1,5 +1,9 @@
+
 import { PlaceHolderImages } from '@/lib/placeholder-images';
 import Image from 'next/image';
+import { Suspense } from 'react';
+import { Loader2 } from 'lucide-react';
+import { Card } from '@/components/ui/card';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const authBg = PlaceHolderImages.find(p => p.id === 'auth-background');
@@ -16,7 +20,13 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         />
       )}
       <div className="absolute inset-0 bg-background/50 -z-10" />
-      {children}
+      <Suspense fallback={
+        <Card className="w-full max-w-sm flex items-center justify-center p-12">
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </Card>
+      }>
+        {children}
+      </Suspense>
     </main>
   );
 }
