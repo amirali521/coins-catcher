@@ -7,8 +7,8 @@
  * This file defines the logic for calculating various withdrawal options (PKR, PUBG UC, FreeFire Diamonds)
  * based on a user's coin balance. It uses the Gemini API to perform conversions and determine package costs.
  *
- * - calculateWithdrawalFlow - The main flow function.
- * - PkrOption, UcOption, DiamondOption - Zod schemas for the output types.
+ * - calculateWithdrawalFlow - The main exported async function to call the flow.
+ * - PkrOption, UcOption, DiamondOption - Type definitions for the output.
  */
 
 import { ai } from '@/ai/genkit';
@@ -19,22 +19,23 @@ const WithdrawalCalculationInputSchema = z.object({
   withdrawalType: z.enum(['pkr', 'uc', 'ff_diamond']).describe("The type of withdrawal calculation requested."),
   userCoins: z.number().describe("The user's current coin balance."),
 });
+type WithdrawalCalculationInput = z.infer<typeof WithdrawalCalculationInputSchema>;
 
 // Output Schemas
-export const PkrOptionSchema = z.object({
+const PkrOptionSchema = z.object({
   pkr: z.number().describe("The amount in Pakistani Rupees (PKR)."),
   usd: z.number().describe("The equivalent amount in US Dollars (USD)."),
   coinCost: z.number().describe("The cost in in-app coins."),
 });
 export type PkrOption = z.infer<typeof PkrOptionSchema>;
 
-export const UcOptionSchema = z.object({
+const UcOptionSchema = z.object({
   uc: z.number().describe("The amount of PUBG Mobile UC."),
   coinCost: z.number().describe("The cost in in-app coins."),
 });
 export type UcOption = z.infer<typeof UcOptionSchema>;
 
-export const DiamondOptionSchema = z.object({
+const DiamondOptionSchema = z.object({
   diamonds: z.number().describe("The amount of FreeFire Diamonds."),
   coinCost: z.number().describe("The cost in in-app coins."),
 });
@@ -88,7 +89,7 @@ const calculationPrompt = ai.definePrompt({
     `,
 });
 
-export const calculateWithdrawalFlow = ai.defineFlow(
+const calculateWithdrawalFlowInternal = ai.defineFlow(
   {
     name: 'calculateWithdrawalFlow',
     inputSchema: WithdrawalCalculationInputSchema,
@@ -102,3 +103,7 @@ export const calculateWithdrawalFlow = ai.defineFlow(
     return output;
   }
 );
+
+export async function calculateWithdrawalFlow(input: WithdrawalCalculationInput): Promise<WithdrawalCalculationOutput> {
+    return calculateWithdrawalFlowInternal(input);
+}
