@@ -204,8 +204,8 @@ export default function DashboardPage() {
             Claim your free coins every {HOURLY_CLAIM_COOLDOWN_HOURS} hours.
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col flex-1 items-center justify-center gap-6">
-          <div className="text-center">
+        <CardContent className="flex flex-col flex-1 items-center justify-center gap-6 text-center">
+          <div>
             {canClaimHourly ? (
               <>
                 <p className="text-lg text-muted-foreground">Your reward is ready!</p>
@@ -222,6 +222,7 @@ export default function DashboardPage() {
               </>
             )}
           </div>
+          <BannerAd />
           <Button
             size="lg"
             className="w-full max-w-xs text-lg py-6 transition-transform duration-200 hover:scale-105"
