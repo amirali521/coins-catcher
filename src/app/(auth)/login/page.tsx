@@ -63,7 +63,6 @@ export default function LoginPage() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       await login(values.email, values.password);
-      router.push('/dashboard');
     } catch (error: any) {
       if (error.code === 'auth/email-not-verified') {
         toast({
@@ -85,7 +84,6 @@ export default function LoginPage() {
   const handleGoogleSignIn = async () => {
     try {
       await signInWithGoogle();
-      router.push('/dashboard');
     } catch (error: any) {
        toast({
         variant: "destructive",
