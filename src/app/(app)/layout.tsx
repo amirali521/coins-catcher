@@ -1,8 +1,8 @@
+
 'use client';
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/lib/auth';
 import {
   SidebarProvider,
   Sidebar,
@@ -17,8 +17,6 @@ import { Logo } from '@/components/logo';
 import { UserNav } from '@/components/user-nav';
 import { MainNav } from '@/components/main-nav';
 import { useAuth } from '@/lib/auth';
-import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
 import { Coins } from 'lucide-react';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

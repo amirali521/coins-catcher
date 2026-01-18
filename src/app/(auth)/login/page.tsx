@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -24,6 +25,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { Logo } from "@/components/logo";
+import { useToast } from "@/hooks/use-toast";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { Loader2 } from "lucide-react";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email." }),
@@ -31,7 +36,9 @@ const formSchema = z.object({
 });
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, signInWithGoogle, user, loading } = useAuth();
+  const { toast } = useToast();
+  const router = useRouter();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -41,13 +48,46 @@ export default function LoginPage() {
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    login(values.email);
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace('/dashboard');
+    }
+  }, [user, loading, router]);
+
+
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    try {
+      await login(values.email, values.password);
+      router.push('/dashboard');
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Sign in failed",
+        description: error.message.replace('Firebase: ', ''),
+      });
+    }
   }
   
-  const handleGoogleSignIn = () => {
-    login('user@google.com');
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+      router.push('/dashboard');
+    } catch (error: any) {
+       toast({
+        variant: "destructive",
+        title: "Google Sign-in failed",
+        description: error.message.replace('Firebase: ', ''),
+      });
+    }
   };
+  
+  if (loading || user) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <Card className="w-full max-w-sm">
@@ -87,8 +127,8 @@ export default function LoginPage() {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full">
-              Sign In
+            <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? "Signing In..." : "Sign In"}
             </Button>
           </form>
         </Form>

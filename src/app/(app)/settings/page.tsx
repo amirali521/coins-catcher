@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -31,11 +32,11 @@ export default function SettingsPage() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="name">Name</Label>
-            <Input id="name" value={user?.displayName} readOnly />
+            <Input id="name" value={user?.displayName || ''} readOnly />
           </div>
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
-            <Input id="email" value={user?.email} readOnly />
+            <Input id="email" value={user?.email || ''} readOnly />
           </div>
         </CardContent>
       </Card>

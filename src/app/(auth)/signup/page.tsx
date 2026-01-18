@@ -1,3 +1,4 @@
+
 "use client";
 
 import Link from "next/link";
@@ -25,6 +26,9 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { Logo } from "@/components/logo";
 import { useToast } from "@/hooks/use-toast";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
+import { Loader2 } from "lucide-react";
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -33,8 +37,9 @@ const formSchema = z.object({
 });
 
 export default function SignupPage() {
-  const { signup } = useAuth();
+  const { signup, signInWithGoogle, user, loading } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -45,19 +50,50 @@ export default function SignupPage() {
     },
   });
 
-  function onSubmit(values: z.infer<typeof formSchema>) {
-    // Mocking email verification
-    toast({
-        title: "Verification Email Sent",
-        description: "Please check your email to verify your account.",
-    });
-    // In a real app, you'd wait for verification before calling signup
-    signup(values.name, values.email);
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace('/dashboard');
+    }
+  }, [user, loading, router]);
+
+
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    try {
+      await signup(values.name, values.email, values.password);
+      toast({
+          title: "Account Created!",
+          description: "You have been signed in.",
+      });
+      router.push('/dashboard');
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Sign up failed",
+        description: error.message.replace('Firebase: ', ''),
+      });
+    }
   }
   
-  const handleGoogleSignIn = () => {
-    signup('New User', 'user@google.com');
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+      router.push('/dashboard');
+    } catch (error: any) {
+       toast({
+        variant: "destructive",
+        title: "Google Sign-in failed",
+        description: error.message.replace('Firebase: ', ''),
+      });
+    }
   };
+
+  if (loading || user) {
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <Card className="w-full max-w-sm">
@@ -110,8 +146,8 @@ export default function SignupPage() {
                 </FormItem>
               )}
             />
-            <Button type="submit" className="w-full">
-              Create Account
+            <Button type="submit" className="w-full" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? "Creating account..." : "Create Account"}
             </Button>
           </form>
         </Form>
