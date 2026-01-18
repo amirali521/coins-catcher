@@ -20,6 +20,7 @@ import { useAuth } from '@/lib/auth';
 import { Coins } from 'lucide-react';
 import { useAdBlockDetector } from '@/hooks/use-ad-block-detector';
 import { AdBlockerOverlay } from '@/components/ad-blocker-overlay';
+import NativeBannerAd from '@/components/ads/native-banner-ad';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -57,11 +58,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <SidebarContent>
           <MainNav />
         </SidebarContent>
-        <SidebarFooter className="p-4">
+        <SidebarFooter className="p-2 space-y-2">
           <div className="w-full flex items-center justify-center gap-2 rounded-lg bg-primary/10 p-3 text-sm font-medium text-primary">
             <Coins className="h-5 w-5" />
             <span className="truncate">{user.coins.toLocaleString()} Coins</span>
           </div>
+          <NativeBannerAd />
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
