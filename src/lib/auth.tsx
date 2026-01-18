@@ -15,7 +15,7 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth, db } from '@/firebase/init';
-import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection, addDoc } from 'firebase/firestore';
 import { isToday, isYesterday } from 'date-fns';
 
 interface User {
@@ -45,9 +45,20 @@ interface AuthContextType {
   claimHourlyReward: (amount: number) => Promise<void>;
   claimFaucetReward: (amount: number) => Promise<void>;
   claimDailyReward: () => Promise<{ amount: number; newStreak: number }>;
+  withdrawCoins: (amount: number, description: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const addTransaction = async (userId: string, type: string, amount: number, description: string) => {
+    const transactionsRef = collection(db, 'users', userId, 'transactions');
+    await addDoc(transactionsRef, {
+        type,
+        amount,
+        description,
+        date: serverTimestamp(),
+    });
+};
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -114,12 +125,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const fbUser = userCredential.user;
     let referred = false;
     let referrerId: string | null = null;
+    let initialCoins = 200; // Universal welcome bonus
 
     const userDocRef = doc(db, 'users', fbUser.uid);
     const docSnap = await getDoc(userDocRef);
 
     if (!docSnap.exists()) {
-        const initialCoins = 200; // Universal welcome bonus
         if (referralCode) {
             const q = query(collection(db, 'users'), where('referralCode', '==', referralCode), limit(1));
             const querySnapshot = await getDocs(q);
@@ -127,6 +138,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 const referrerDoc = querySnapshot.docs[0];
                 referrerId = referrerDoc.id;
                 await updateDoc(referrerDoc.ref, { coins: increment(300) });
+                await addTransaction(referrerId, 'referral-bonus', 300, `Referral bonus from ${fbUser.displayName}`);
                 referred = true;
             }
         }
@@ -145,6 +157,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         lastDailyClaim: null,
         lastFaucetClaimTimestamp: null,
       });
+      await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
     }
     return { referred };
   };
@@ -163,6 +176,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const referrerDoc = querySnapshot.docs[0];
             referrerId = referrerDoc.id;
             await updateDoc(referrerDoc.ref, { coins: increment(300) });
+            await addTransaction(referrerId, 'referral-bonus', 300, `Referral bonus from ${name}`);
             referred = true;
         }
     }
@@ -187,6 +201,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       lastDailyClaim: null,
       lastFaucetClaimTimestamp: null,
     });
+    await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
 
     await sendEmailVerification(fbUser);
     return { referred };
@@ -203,6 +218,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         coins: increment(amount),
         lastClaimTimestamp: serverTimestamp(),
       });
+      await addTransaction(user.uid, 'claim', amount, 'Hourly reward');
     }
   };
 
@@ -213,6 +229,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         coins: increment(amount),
         lastFaucetClaimTimestamp: serverTimestamp(),
       });
+      await addTransaction(user.uid, 'faucet', amount, 'Faucet reward');
     }
   };
 
@@ -252,9 +269,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         lastDailyClaim: serverTimestamp(),
     });
     
+    await addTransaction(user.uid, 'daily-reward', rewardAmount, `Day ${currentStreak} streak bonus`);
+    
     return { amount: rewardAmount, newStreak: currentStreak };
   };
 
+  const withdrawCoins = async (amount: number, description: string) => {
+    if (!user) throw new Error("User not authenticated");
+    if (user.coins < amount) throw new Error("Insufficient coins");
+    
+    const userRef = doc(db, 'users', user.uid);
+    await updateDoc(userRef, {
+      coins: increment(-amount),
+    });
+    await addTransaction(user.uid, 'withdraw', -amount, description);
+  };
   
   const sendVerificationEmail = async () => {
     if (auth.currentUser) {
@@ -268,7 +297,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await firebaseSendPasswordResetEmail(auth, email);
   };
 
-  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward };
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawCoins };
 
   return (
     <AuthContext.Provider value={value}>
