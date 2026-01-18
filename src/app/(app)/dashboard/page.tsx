@@ -14,7 +14,7 @@ const CLAIM_COOLDOWN_HOURS = 3;
 const CLAIM_AMOUNT = 100;
 
 export default function DashboardPage() {
-  const { user, updateCoins } = useAuth();
+  const { user, claimReward } = useAuth();
   const { toast } = useToast();
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
   const [canClaim, setCanClaim] = useState(false);
@@ -23,10 +23,9 @@ export default function DashboardPage() {
 
 
   const calculateTimeLeft = useCallback(() => {
-    const lastClaimTimestamp = localStorage.getItem('lastClaimTimestamp');
-    if (lastClaimTimestamp) {
+    if (user?.lastClaimTimestamp) {
       const now = new Date().getTime();
-      const lastClaimTime = parseInt(lastClaimTimestamp, 10);
+      const lastClaimTime = new Date(user.lastClaimTimestamp.seconds * 1000).getTime();
       const cooldownMs = CLAIM_COOLDOWN_HOURS * 60 * 60 * 1000;
       const nextClaimTime = lastClaimTime + cooldownMs;
 
@@ -41,7 +40,7 @@ export default function DashboardPage() {
       setCanClaim(true);
       setTimeLeft(0);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     calculateTimeLeft();
@@ -60,32 +59,41 @@ export default function DashboardPage() {
 
   const handleClaim = async () => {
     if (canClaim && user) {
-      await updateCoins(user.coins + CLAIM_AMOUNT);
-      localStorage.setItem('lastClaimTimestamp', new Date().getTime().toString());
-      setCanClaim(false);
-      calculateTimeLeft();
-      
-      toast({
-        title: "🎉 Reward Claimed!",
-        description: `You have received ${CLAIM_AMOUNT} coins.`,
-      });
-
-      // Simulate Popunder ad
-      window.open('https://adsterra.com/', '_blank');
+      try {
+        await claimReward(CLAIM_AMOUNT);
+        toast({
+          title: "🎉 Reward Claimed!",
+          description: `You have received ${CLAIM_AMOUNT} coins.`,
+        });
+        window.open('https://adsterra.com/', '_blank');
+      } catch (error) {
+        console.error("Failed to claim reward:", error);
+        toast({
+            variant: "destructive",
+            title: "Claim Failed",
+            description: "There was an issue claiming your reward. Please try again later.",
+        });
+      }
     }
   };
 
   const handleBonusClaim = async (amount: number) => {
-    if (user) {
-      await updateCoins(user.coins + amount);
-      
-      toast({
-        title: "🎉 Reward Claimed!",
-        description: `You have received ${amount} coins.`,
-      });
-
-      // Simulate Popunder ad
-      window.open('https://adsterra.com/', '_blank');
+    if (canClaim && user) {
+       try {
+        await claimReward(amount);
+        toast({
+          title: "🎉 Reward Claimed!",
+          description: `You have received ${amount} coins.`,
+        });
+        window.open('https://adsterra.com/', '_blank');
+      } catch (error) {
+        console.error("Failed to claim reward:", error);
+        toast({
+            variant: "destructive",
+            title: "Claim Failed",
+            description: "There was an issue claiming your reward. Please try again later.",
+        });
+      }
     }
   };
 
@@ -96,19 +104,26 @@ export default function DashboardPage() {
   };
 
   const handleFaucetClaim = async () => {
-    if (user && faucetAdClicked) {
-      await updateCoins(user.coins + 50);
-      
-      toast({
-        title: "🎉 Faucet Reward Claimed!",
-        description: `You have received 50 coins.`,
-      });
-      
-      setFaucetPopoverOpen(false);
-       // Reset for next time after a short delay
-      setTimeout(() => {
-        setFaucetAdClicked(false);
-      }, 100);
+    if (user && faucetAdClicked && canClaim) {
+      try {
+        await claimReward(50);
+        toast({
+          title: "🎉 Faucet Reward Claimed!",
+          description: `You have received 50 coins.`,
+        });
+        setFaucetPopoverOpen(false);
+         // Reset for next time after a short delay
+        setTimeout(() => {
+          setFaucetAdClicked(false);
+        }, 100);
+      } catch (error) {
+        console.error("Failed to claim faucet reward:", error);
+        toast({
+            variant: "destructive",
+            title: "Claim Failed",
+            description: "There was an issue claiming your reward. Please try again later.",
+        });
+      }
     }
   };
 
@@ -179,6 +194,7 @@ export default function DashboardPage() {
               size="lg"
               className="w-full text-lg py-8 flex flex-col h-auto transition-transform duration-200 hover:scale-105"
               onClick={() => handleBonusClaim(20)}
+              disabled={!canClaim}
             >
               <div className="flex items-center gap-2">
                 <Coins className="h-6 w-6"/>
@@ -190,6 +206,7 @@ export default function DashboardPage() {
               size="lg"
               className="w-full text-lg py-8 flex flex-col h-auto transition-transform duration-200 hover:scale-105"
               onClick={() => handleBonusClaim(30)}
+              disabled={!canClaim}
             >
               <div className="flex items-center gap-2">
                 <Coins className="h-6 w-6"/>
@@ -201,6 +218,7 @@ export default function DashboardPage() {
               size="lg"
               className="w-full text-lg py-8 flex flex-col h-auto transition-transform duration-200 hover:scale-105"
               onClick={() => handleBonusClaim(30)}
+              disabled={!canClaim}
             >
                <div className="flex items-center gap-2">
                 <Coins className="h-6 w-6"/>
@@ -253,9 +271,14 @@ export default function DashboardPage() {
                                 <p className="text-muted-foreground text-xs mt-1">Click here to unlock your reward</p>
                             </div>
                         </div>
-                        <Button onClick={handleFaucetClaim} disabled={!faucetAdClicked}>
+                        <Button onClick={handleFaucetClaim} disabled={!faucetAdClicked || !canClaim}>
                             <Gift className="mr-2 h-4 w-4" />
-                            {faucetAdClicked ? "Claim 50 Coins" : "Waiting for ad click..."}
+                            {!canClaim 
+                                ? "Reward on cooldown" 
+                                : faucetAdClicked 
+                                    ? "Claim 50 Coins" 
+                                    : "Waiting for ad click..."
+                            }
                         </Button>
                     </div>
                 </PopoverContent>

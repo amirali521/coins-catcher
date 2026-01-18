@@ -15,7 +15,7 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth, db } from '@/firebase/init';
-import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection } from 'firebase/firestore';
 
 interface User {
   uid: string;
@@ -25,6 +25,7 @@ interface User {
   coins: number;
   referralCode: string;
   admin: boolean;
+  lastClaimTimestamp?: { seconds: number; nanoseconds: number; } | null;
 }
 
 interface AuthContextType {
@@ -35,6 +36,7 @@ interface AuthContextType {
   signup: (name: string, email: string, password?: string, referralCode?: string | null) => Promise<{ referred: boolean }>;
   logout: () => void;
   updateCoins: (newCoins: number) => Promise<void>;
+  claimReward: (amount: number) => Promise<void>;
   signInWithGoogle: (referralCode?: string | null) => Promise<{ referred: boolean }>;
   sendVerificationEmail: () => Promise<void>;
   sendPasswordResetEmail: (email: string) => Promise<void>;
@@ -64,6 +66,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               coins: userData.coins,
               referralCode: userData.referralCode,
               admin: userData.admin || false,
+              lastClaimTimestamp: userData.lastClaimTimestamp || null,
             });
           }
           // If doc doesn't exist, it will be created on signup/google sign-in
@@ -127,6 +130,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
         admin: false,
         createdAt: serverTimestamp(),
+        lastClaimTimestamp: null,
       });
     }
     return { referred };
@@ -163,6 +167,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
       admin: false,
       createdAt: serverTimestamp(),
+      lastClaimTimestamp: null,
     });
 
     await sendEmailVerification(fbUser);
@@ -179,6 +184,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await updateDoc(userRef, { coins: newCoins });
     }
   };
+
+  const claimReward = async (amount: number) => {
+    if (user) {
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        coins: increment(amount),
+        lastClaimTimestamp: serverTimestamp(),
+      });
+    }
+  };
   
   const sendVerificationEmail = async () => {
     if (auth.currentUser) {
@@ -192,7 +207,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await firebaseSendPasswordResetEmail(auth, email);
   };
 
-  const value = { user, firebaseUser, loading, login, signup, logout, updateCoins, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail };
+  const value = { user, firebaseUser, loading, login, signup, logout, updateCoins, claimReward, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail };
 
   return (
     <AuthContext.Provider value={value}>
