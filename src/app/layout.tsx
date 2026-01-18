@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import Script from 'next/script';
 import './globals.css';
 import { AuthProvider } from '@/lib/auth';
 import { Toaster } from '@/components/ui/toaster';
@@ -26,6 +27,7 @@ export default function RootLayout({
           {children}
           <Toaster />
         </AuthProvider>
+        <Script src="https://pl28511611.effectivegatecpm.com/6d/4d/07/6d4d07abfc3e909a2b7da7c4af0bed48.js" strategy="afterInteractive" />
       </body>
     </html>
   );
