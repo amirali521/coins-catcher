@@ -1,3 +1,4 @@
+
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import './globals.css';
@@ -28,7 +29,6 @@ export default function RootLayout({
           <Toaster />
         </AuthProvider>
         <Script src="https://pl28511611.effectivegatecpm.com/6d/4d/07/6d4d07abfc3e909a2b7da7c4af0bed48.js" strategy="afterInteractive" />
-        <Script src="https://pl28511778.effectivegatecpm.com/ea/7f/71/ea7f71426ad468cbb865122537de7cbe.js" strategy="lazyOnload" />
       </body>
     </html>
   );
