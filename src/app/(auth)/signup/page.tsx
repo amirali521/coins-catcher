@@ -28,12 +28,13 @@ import { Logo } from "@/components/logo";
 import { useToast } from "@/hooks/use-toast";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Gift } from "lucide-react";
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   email: z.string().email({ message: "Please enter a valid email." }),
   password: z.string().min(6, { message: "Password must be at least 6 characters." }),
+  referralCode: z.string().optional(),
 });
 
 export default function SignupPage() {
@@ -49,6 +50,7 @@ export default function SignupPage() {
       name: "",
       email: "",
       password: "",
+      referralCode: refCode || "",
     },
   });
 
@@ -66,12 +68,12 @@ export default function SignupPage() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
-      const { referred } = await signup(values.name, values.email, values.password, refCode);
+      const { referred } = await signup(values.name, values.email, values.password, values.referralCode);
       toast({
           title: "Account Created!",
           description: referred 
-            ? "You received a 200 coin bonus, and your friend got 300 coins! A verification email has also been sent."
-            : "A verification email has been sent. Please check your inbox.",
+            ? "Welcome! You received a 200 coin bonus, and your friend got 300 coins! A verification email has also been sent."
+            : "Welcome! You received a 200 coin bonus. A verification email has been sent.",
       });
       router.push('/verify-email');
     } catch (error: any) {
@@ -84,12 +86,18 @@ export default function SignupPage() {
   }
   
   const handleGoogleSignIn = async () => {
+    // For Google Sign-in, we only use the referral code from the URL, as it's a one-click action.
     try {
       const { referred } = await signInWithGoogle(refCode);
       if (referred) {
         toast({
           title: "Welcome!",
           description: "You have received a 200 coin bonus, and your friend has received 300 coins!",
+        });
+      } else {
+         toast({
+          title: "Welcome!",
+          description: "You have received a 200 coin welcome bonus!",
         });
       }
       router.push('/dashboard');
@@ -116,7 +124,7 @@ export default function SignupPage() {
         <Logo className="justify-center mb-2"/>
         <CardTitle className="text-2xl">Create an Account</CardTitle>
         <CardDescription>
-          Join now to start earning coins!
+          Join now to start earning coins! All new users get a 200 coin welcome bonus.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -156,6 +164,22 @@ export default function SignupPage() {
                   <FormLabel>Password</FormLabel>
                   <FormControl>
                     <Input type="password" placeholder="••••••••" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="referralCode"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Referral Code (Optional)</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <Gift className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input placeholder="Enter referral code" {...field} disabled={!!refCode} className="pl-9" />
+                    </div>
                   </FormControl>
                   <FormMessage />
                 </FormItem>

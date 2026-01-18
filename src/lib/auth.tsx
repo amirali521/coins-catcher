@@ -118,14 +118,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const docSnap = await getDoc(userDocRef);
 
     if (!docSnap.exists()) {
-        let initialCoins = 0;
+        const initialCoins = 200; // Universal welcome bonus
         if (referralCode) {
             const q = query(collection(db, 'users'), where('referralCode', '==', referralCode), limit(1));
             const querySnapshot = await getDocs(q);
             if (!querySnapshot.empty) {
                 const referrerDoc = querySnapshot.docs[0];
                 await updateDoc(referrerDoc.ref, { coins: increment(300) });
-                initialCoins = 200;
                 referred = true;
             }
         }
@@ -151,7 +150,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!password) throw new Error("Password is required for email/password signup.");
     
     let referred = false;
-    let initialCoins = 0;
+    const initialCoins = 200; // Universal welcome bonus
 
     if (referralCode) {
         const q = query(collection(db, 'users'), where('referralCode', '==', referralCode), limit(1));
@@ -159,7 +158,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!querySnapshot.empty) {
             const referrerDoc = querySnapshot.docs[0];
             await updateDoc(referrerDoc.ref, { coins: increment(300) });
-            initialCoins = 200;
             referred = true;
         }
     }

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -39,7 +40,7 @@ export default function ReferralsPage() {
         <CardHeader>
           <CardTitle>Your Referral Link</CardTitle>
           <CardDescription>
-            Share this link with your friends. When they sign up, you'll get a 300 coin bonus, and they'll receive 200 coins!
+            Share this link with your friends. When they sign up using your code, you'll earn a 300 coin bonus, and they'll get a 200 coin welcome bonus to start!
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -53,7 +54,7 @@ export default function ReferralsPage() {
         <CardFooter>
             <div className="flex items-center text-sm text-muted-foreground">
                 <Gift className="mr-2 h-4 w-4 text-primary" />
-                <span>You'll receive <strong>300 coins</strong> and your friend will receive <strong>200 coins</strong> as a bonus.</span>
+                <span>You'll receive <strong>300 coins</strong> and your friend will receive a <strong>200 coin</strong> welcome bonus.</span>
             </div>
         </CardFooter>
       </Card>
