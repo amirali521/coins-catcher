@@ -113,6 +113,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const userCredential = await signInWithPopup(auth, provider);
     const fbUser = userCredential.user;
     let referred = false;
+    let referrerId: string | null = null;
 
     const userDocRef = doc(db, 'users', fbUser.uid);
     const docSnap = await getDoc(userDocRef);
@@ -124,6 +125,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const querySnapshot = await getDocs(q);
             if (!querySnapshot.empty) {
                 const referrerDoc = querySnapshot.docs[0];
+                referrerId = referrerDoc.id;
                 await updateDoc(referrerDoc.ref, { coins: increment(300) });
                 referred = true;
             }
@@ -135,6 +137,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         displayName: fbUser.displayName,
         coins: initialCoins,
         referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
+        referredBy: referrerId,
         admin: false,
         createdAt: serverTimestamp(),
         lastClaimTimestamp: null,
@@ -150,6 +153,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!password) throw new Error("Password is required for email/password signup.");
     
     let referred = false;
+    let referrerId: string | null = null;
     const initialCoins = 200; // Universal welcome bonus
 
     if (referralCode) {
@@ -157,6 +161,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
             const referrerDoc = querySnapshot.docs[0];
+            referrerId = referrerDoc.id;
             await updateDoc(referrerDoc.ref, { coins: increment(300) });
             referred = true;
         }
@@ -174,6 +179,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       displayName: name,
       coins: initialCoins,
       referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
+      referredBy: referrerId,
       admin: false,
       createdAt: serverTimestamp(),
       lastClaimTimestamp: null,

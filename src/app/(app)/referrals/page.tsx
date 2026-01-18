@@ -1,6 +1,7 @@
 
 "use client";
 
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,13 +14,59 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, Gift } from "lucide-react";
+import { Copy, Gift, Users, Loader2 } from "lucide-react";
+import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore";
+import { db } from "@/firebase/init";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+interface ReferredUser {
+    uid: string;
+    displayName: string;
+    email: string;
+}
 
 export default function ReferralsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const [referredUsers, setReferredUsers] = useState<ReferredUser[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const referralLink = `https://coincatcher.app/signup?ref=${user?.referralCode}`;
+
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const q = query(
+        collection(db, "users"), 
+        where("referredBy", "==", user.uid),
+        orderBy("createdAt", "desc")
+    );
+    
+    const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const users: ReferredUser[] = [];
+        querySnapshot.forEach((doc) => {
+            const data = doc.data();
+            users.push({
+                uid: doc.id,
+                displayName: data.displayName,
+                email: data.email,
+            });
+        });
+        setReferredUsers(users);
+        setLoading(false);
+    }, (error) => {
+        console.error("Error fetching referred users:", error);
+        toast({
+            variant: "destructive",
+            title: "Error",
+            description: "Could not fetch your referrals.",
+        });
+        setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user, toast]);
 
   const handleCopy = () => {
     navigator.clipboard.writeText(referralLink);
@@ -27,6 +74,11 @@ export default function ReferralsPage() {
       title: "Copied to Clipboard!",
       description: "Your referral link is ready to be shared.",
     });
+  };
+
+  const getInitials = (name: string | null) => {
+    if (!name) return "U";
+    return name.split(" ").map((n) => n[0]).join("");
   };
 
   return (
@@ -57,6 +109,61 @@ export default function ReferralsPage() {
                 <span>You'll receive <strong>300 coins</strong> and your friend will receive a <strong>200 coin</strong> welcome bonus.</span>
             </div>
         </CardFooter>
+      </Card>
+
+      <Card>
+        <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+                <Users />
+                Your Referrals ({referredUsers.length})
+            </CardTitle>
+            <CardDescription>
+                Here's a list of users who have signed up using your referral code.
+            </CardDescription>
+        </CardHeader>
+        <CardContent>
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>User</TableHead>
+                        <TableHead className="text-right">User ID</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {loading ? (
+                        <TableRow>
+                            <TableCell colSpan={2} className="h-24 text-center">
+                                <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                            </TableCell>
+                        </TableRow>
+                    ) : referredUsers.length > 0 ? (
+                        referredUsers.map((refUser) => (
+                            <TableRow key={refUser.uid}>
+                                <TableCell>
+                                    <div className="flex items-center gap-3">
+                                        <Avatar>
+                                            <AvatarImage src={`https://avatar.vercel.sh/${refUser.email}.png`} alt={refUser.displayName} />
+                                            <AvatarFallback>{getInitials(refUser.displayName)}</AvatarFallback>
+                                        </Avatar>
+                                        <div>
+                                            <p className="font-medium">{refUser.displayName || 'N/A'}</p>
+                                            <p className="text-sm text-muted-foreground">{refUser.email}</p>
+                                        </div>
+                                    </div>
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-xs text-muted-foreground">{refUser.uid}</TableCell>
+                            </TableRow>
+                        ))
+                    ) : (
+                        <TableRow>
+                            <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
+                                You haven't referred any users yet. Share your link to get started!
+                            </TableCell>
+                        </TableRow>
+                    )}
+                </TableBody>
+            </Table>
+        </CardContent>
       </Card>
       
     </div>
