@@ -86,6 +86,23 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, [calculateCooldowns]);
 
+  // New logic to detect ad click via window blur
+  useEffect(() => {
+    const handleBlur = () => {
+        if (faucetPopoverOpen) {
+            setFaucetAdClicked(true);
+        }
+    };
+
+    if (faucetPopoverOpen) {
+        window.addEventListener('blur', handleBlur);
+    }
+
+    return () => {
+        window.removeEventListener('blur', handleBlur);
+    };
+  }, [faucetPopoverOpen]);
+
   const formatTime = (ms: number | null) => {
     if (ms === null || ms <= 0) return "00:00:00";
     const totalSeconds = Math.floor(ms / 1000);
@@ -113,11 +130,6 @@ export default function DashboardPage() {
         });
       }
     }
-  };
-
-  const handleFaucetAdClick = () => {
-    setFaucetAdClicked(true);
-    // The ad script should handle opening the new window.
   };
 
   const handleFaucetClaim = async () => {
@@ -302,10 +314,7 @@ export default function DashboardPage() {
                             </p>
                         </div>
                         <div 
-                            onClick={handleFaucetAdClick}
-                            role="button"
-                            tabIndex={0}
-                            className="cursor-pointer flex justify-center"
+                            className="flex justify-center"
                         >
                             <FaucetBannerAd />
                         </div>
@@ -329,5 +338,4 @@ export default function DashboardPage() {
       </div>
     </div>
   );
-
-    
+}
