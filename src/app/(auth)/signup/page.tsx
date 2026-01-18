@@ -51,8 +51,13 @@ export default function SignupPage() {
   });
 
   useEffect(() => {
-    if (!loading && user) {
-      router.replace('/dashboard');
+    if (loading) return;
+    if (user) {
+        if(user.emailVerified) {
+            router.replace('/dashboard');
+        } else {
+            router.replace('/verify-email');
+        }
     }
   }, [user, loading, router]);
 
@@ -62,9 +67,9 @@ export default function SignupPage() {
       await signup(values.name, values.email, values.password);
       toast({
           title: "Account Created!",
-          description: "You have been signed in.",
+          description: "A verification email has been sent. Please check your inbox.",
       });
-      router.push('/dashboard');
+      router.push('/verify-email');
     } catch (error: any) {
       toast({
         variant: "destructive",

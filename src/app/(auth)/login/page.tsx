@@ -49,8 +49,13 @@ export default function LoginPage() {
   });
 
   useEffect(() => {
-    if (!loading && user) {
-      router.replace('/dashboard');
+    if (loading) return;
+    if (user) {
+      if (user.emailVerified) {
+        router.replace('/dashboard');
+      } else {
+        router.replace('/verify-email');
+      }
     }
   }, [user, loading, router]);
 
@@ -60,11 +65,20 @@ export default function LoginPage() {
       await login(values.email, values.password);
       router.push('/dashboard');
     } catch (error: any) {
-      toast({
-        variant: "destructive",
-        title: "Sign in failed",
-        description: error.message.replace('Firebase: ', ''),
-      });
+      if (error.code === 'auth/email-not-verified') {
+        toast({
+            variant: "destructive",
+            title: "Email not verified",
+            description: "Please check your inbox and verify your email address.",
+        });
+        router.push('/verify-email');
+      } else {
+        toast({
+            variant: "destructive",
+            title: "Sign in failed",
+            description: error.message.replace('Firebase: ', ''),
+        });
+      }
     }
   }
   
@@ -119,7 +133,15 @@ export default function LoginPage() {
               name="password"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Password</FormLabel>
+                    <div className="flex items-center">
+                        <FormLabel>Password</FormLabel>
+                        <Link
+                            href="/forgot-password"
+                            className="ml-auto inline-block text-sm text-primary underline"
+                        >
+                            Forgot your password?
+                        </Link>
+                    </div>
                   <FormControl>
                     <Input type="password" placeholder="••••••••" {...field} />
                   </FormControl>

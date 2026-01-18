@@ -10,6 +10,8 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   updateProfile,
+  sendEmailVerification,
+  sendPasswordResetEmail as firebaseSendPasswordResetEmail,
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth } from '@/firebase/init';
@@ -18,6 +20,7 @@ interface User {
   uid: string;
   email: string | null;
   displayName: string | null;
+  emailVerified: boolean;
   coins: number;
   referralCode: string;
 }
@@ -31,6 +34,8 @@ interface AuthContextType {
   logout: () => void;
   updateCoins: (newCoins: number) => void;
   signInWithGoogle: () => Promise<void>;
+  sendVerificationEmail: () => Promise<void>;
+  sendPasswordResetEmail: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -50,16 +55,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      setFirebaseUser(fbUser);
       if (fbUser) {
-        const additionalData = await getAdditionalUserData(fbUser.uid);
-        setUser({
-          uid: fbUser.uid,
-          email: fbUser.email,
-          displayName: fbUser.displayName,
-          ...additionalData,
-        });
+        await fbUser.reload();
+        const freshFbUser = auth.currentUser;
+        setFirebaseUser(freshFbUser);
+
+        if (freshFbUser) {
+            const additionalData = await getAdditionalUserData(freshFbUser.uid);
+            setUser({
+              uid: freshFbUser.uid,
+              email: freshFbUser.email,
+              displayName: freshFbUser.displayName,
+              emailVerified: freshFbUser.emailVerified,
+              ...additionalData,
+            });
+        }
       } else {
+        setFirebaseUser(null);
         setUser(null);
       }
       setLoading(false);
@@ -70,7 +82,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = async (email: string, password?: string) => {
     if (!password) throw new Error("Password is required for email/password login.");
-    await signInWithEmailAndPassword(auth, email, password);
+    const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+    if (!userCredential.user.emailVerified) {
+        await firebaseSignOut(auth);
+        const error: any = new Error("Email not verified. Please check your inbox.");
+        error.code = "auth/email-not-verified";
+        throw error;
+    }
   };
   
   const signInWithGoogle = async () => {
@@ -83,6 +102,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     if (userCredential.user) {
         await updateProfile(userCredential.user, { displayName: name });
+        await sendEmailVerification(userCredential.user);
     }
   };
 
@@ -96,8 +116,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       console.log(`(Mock) Updated coins to ${newCoins} for user ${user.uid}`);
     }
   };
+  
+  const sendVerificationEmail = async () => {
+    if (auth.currentUser) {
+      await sendEmailVerification(auth.currentUser);
+    } else {
+      throw new Error("No user is currently signed in to send a verification email.");
+    }
+  };
 
-  const value = { user, firebaseUser, loading, login, signup, logout, updateCoins, signInWithGoogle };
+  const sendPasswordResetEmail = async (email: string) => {
+    await firebaseSendPasswordResetEmail(auth, email);
+  };
+
+  const value = { user, firebaseUser, loading, login, signup, logout, updateCoins, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail };
 
   return (
     <AuthContext.Provider value={value}>
