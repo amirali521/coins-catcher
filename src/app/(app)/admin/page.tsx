@@ -16,7 +16,7 @@ interface AppUser {
     displayName: string;
     email: string;
     coins: number;
-    isAdmin: boolean;
+    admin: boolean;
     createdAt: { seconds: number; nanoseconds: number; } | null;
 }
 
@@ -90,7 +90,7 @@ export default function AdminPage() {
                                     </TableCell>
                                     <TableCell>{user.coins?.toLocaleString()}</TableCell>
                                     <TableCell>
-                                        {user.isAdmin ? (
+                                        {user.admin ? (
                                             <Badge>Admin</Badge>
                                         ) : (
                                             <Badge variant="secondary">User</Badge>

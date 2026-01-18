@@ -40,7 +40,7 @@ export function MainNav() {
           </SidebarMenuButton>
         </SidebarMenuItem>
       ))}
-      {user?.isAdmin && (
+      {user?.admin && (
         <SidebarMenuItem key={adminLink.href}>
           <SidebarMenuButton
             asChild

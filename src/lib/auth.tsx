@@ -24,7 +24,7 @@ interface User {
   emailVerified: boolean;
   coins: number;
   referralCode: string;
-  isAdmin: boolean;
+  admin: boolean;
 }
 
 interface AuthContextType {
@@ -63,7 +63,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               emailVerified: fbUser.emailVerified,
               coins: userData.coins,
               referralCode: userData.referralCode,
-              isAdmin: userData.isAdmin || false,
+              admin: userData.admin || false,
             });
           }
           // If doc doesn't exist, it will be created on signup/google sign-in
@@ -111,7 +111,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         displayName: fbUser.displayName,
         coins: 0,
         referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
-        isAdmin: false,
+        admin: false,
         createdAt: serverTimestamp(),
       });
     }
@@ -131,7 +131,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       displayName: name,
       coins: 0,
       referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
-      isAdmin: false,
+      admin: false,
       createdAt: serverTimestamp(),
     });
 
