@@ -70,7 +70,7 @@ export default function SignupPage() {
       toast({
           title: "Account Created!",
           description: referred 
-            ? "You and your friend each received a 500 coin bonus! A verification email has also been sent."
+            ? "You received a 200 coin bonus, and your friend got 300 coins! A verification email has also been sent."
             : "A verification email has been sent. Please check your inbox.",
       });
       router.push('/verify-email');
@@ -89,7 +89,7 @@ export default function SignupPage() {
       if (referred) {
         toast({
           title: "Welcome!",
-          description: "You and your friend have each received a 500 coin bonus!",
+          description: "You have received a 200 coin bonus, and your friend has received 300 coins!",
         });
       }
       router.push('/dashboard');

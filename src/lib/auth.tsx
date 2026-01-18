@@ -124,8 +124,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             const querySnapshot = await getDocs(q);
             if (!querySnapshot.empty) {
                 const referrerDoc = querySnapshot.docs[0];
-                await updateDoc(referrerDoc.ref, { coins: increment(500) });
-                initialCoins = 500;
+                await updateDoc(referrerDoc.ref, { coins: increment(300) });
+                initialCoins = 200;
                 referred = true;
             }
         }
@@ -158,8 +158,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const querySnapshot = await getDocs(q);
         if (!querySnapshot.empty) {
             const referrerDoc = querySnapshot.docs[0];
-            await updateDoc(referrerDoc.ref, { coins: increment(500) });
-            initialCoins = 500;
+            await updateDoc(referrerDoc.ref, { coins: increment(300) });
+            initialCoins = 200;
             referred = true;
         }
     }
