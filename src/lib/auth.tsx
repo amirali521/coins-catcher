@@ -15,7 +15,7 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth, db } from '@/firebase/init';
-import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment } from 'firebase/firestore';
 
 interface User {
   uid: string;
@@ -32,10 +32,10 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   loading: boolean;
   login: (email: string, password?: string) => Promise<void>;
-  signup: (name: string, email: string, password?: string) => Promise<void>;
+  signup: (name: string, email: string, password?: string, referralCode?: string | null) => Promise<{ referred: boolean }>;
   logout: () => void;
   updateCoins: (newCoins: number) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGoogle: (referralCode?: string | null) => Promise<{ referred: boolean }>;
   sendVerificationEmail: () => Promise<void>;
   sendPasswordResetEmail: (email: string) => Promise<void>;
 }
@@ -97,28 +97,58 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   };
   
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = async (referralCode?: string | null) => {
     const provider = new GoogleAuthProvider();
     const userCredential = await signInWithPopup(auth, provider);
     const fbUser = userCredential.user;
+    let referred = false;
 
     const userDocRef = doc(db, 'users', fbUser.uid);
     const docSnap = await getDoc(userDocRef);
+
     if (!docSnap.exists()) {
+        let initialCoins = 0;
+        if (referralCode) {
+            const q = query(collection(db, 'users'), where('referralCode', '==', referralCode), limit(1));
+            const querySnapshot = await getDocs(q);
+            if (!querySnapshot.empty) {
+                const referrerDoc = querySnapshot.docs[0];
+                await updateDoc(referrerDoc.ref, { coins: increment(500) });
+                initialCoins = 500;
+                referred = true;
+            }
+        }
+      
       await setDoc(userDocRef, {
         uid: fbUser.uid,
         email: fbUser.email,
         displayName: fbUser.displayName,
-        coins: 0,
+        coins: initialCoins,
         referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
         admin: false,
         createdAt: serverTimestamp(),
       });
     }
+    return { referred };
   };
 
-  const signup = async (name: string, email: string, password?: string) => {
+  const signup = async (name: string, email: string, password?: string, referralCode?: string | null) => {
     if (!password) throw new Error("Password is required for email/password signup.");
+    
+    let referred = false;
+    let initialCoins = 0;
+
+    if (referralCode) {
+        const q = query(collection(db, 'users'), where('referralCode', '==', referralCode), limit(1));
+        const querySnapshot = await getDocs(q);
+        if (!querySnapshot.empty) {
+            const referrerDoc = querySnapshot.docs[0];
+            await updateDoc(referrerDoc.ref, { coins: increment(500) });
+            initialCoins = 500;
+            referred = true;
+        }
+    }
+
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const fbUser = userCredential.user;
 
@@ -129,13 +159,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       uid: fbUser.uid,
       email: fbUser.email,
       displayName: name,
-      coins: 0,
+      coins: initialCoins,
       referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
       admin: false,
       createdAt: serverTimestamp(),
     });
 
     await sendEmailVerification(fbUser);
+    return { referred };
   };
 
   const logout = async () => {

@@ -26,7 +26,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { Logo } from "@/components/logo";
 import { useToast } from "@/hooks/use-toast";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
@@ -40,6 +40,8 @@ export default function SignupPage() {
   const { signup, signInWithGoogle, user, loading } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const refCode = searchParams.get('ref');
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -64,10 +66,12 @@ export default function SignupPage() {
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
-      await signup(values.name, values.email, values.password);
+      const { referred } = await signup(values.name, values.email, values.password, refCode);
       toast({
           title: "Account Created!",
-          description: "A verification email has been sent. Please check your inbox.",
+          description: referred 
+            ? "You and your friend each received a 500 coin bonus! A verification email has also been sent."
+            : "A verification email has been sent. Please check your inbox.",
       });
       router.push('/verify-email');
     } catch (error: any) {
@@ -81,7 +85,13 @@ export default function SignupPage() {
   
   const handleGoogleSignIn = async () => {
     try {
-      await signInWithGoogle();
+      const { referred } = await signInWithGoogle(refCode);
+      if (referred) {
+        toast({
+          title: "Welcome!",
+          description: "You and your friend have each received a 500 coin bonus!",
+        });
+      }
       router.push('/dashboard');
     } catch (error: any) {
        toast({
