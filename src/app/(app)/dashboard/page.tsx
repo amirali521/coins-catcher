@@ -333,7 +333,7 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
-      <div className="md:col-span-2">
+      <div className="md:col-span-2 flex justify-center">
         <BannerAd />
       </div>
     </div>
