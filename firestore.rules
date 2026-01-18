@@ -1,0 +1,48 @@
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.admin == true;
+    }
+    
+    match /users/{userId} {
+      // Admins can read all user profiles.
+      // Users can read their own profile.
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Any authenticated user can query the collection.
+      // This is required for referral code lookup and the admin user list.
+      // NOTE: This allows any user to see data for all other users if they query the collection.
+      allow list: if request.auth != null;
+
+      // Users can create their own profile on signup.
+      // They cannot make themselves an admin and must start with the default coin amount.
+      allow create: if isOwner(userId)
+                    && request.resource.data.admin == false
+                    && request.resource.data.coins == 200;
+      
+      // Users can update their own document, but cannot change their admin status.
+      // Coin logic is handled on the client, which is a security risk.
+      // In a production app, this should be moved to a trusted server environment.
+      allow update: if isOwner(userId)
+                    && request.resource.data.admin == resource.data.admin;
+
+      // Nobody can delete user documents.
+      allow delete: if false;
+
+      match /transactions/{transactionId} {
+        // Users can read and create their own transactions. Transactions are immutable.
+        allow read, list, create: if isOwner(userId);
+        allow update, delete: if false;
+      }
+    }
+  }
+}
