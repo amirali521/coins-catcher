@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Mail, MailCheck } from "lucide-react";
 import { Logo } from "@/components/logo";
 import Link from "next/link";
+import { auth } from "@/firebase/init";
 
 export default function VerifyEmailPage() {
     const { user, firebaseUser, loading, sendVerificationEmail, logout } = useAuth();
