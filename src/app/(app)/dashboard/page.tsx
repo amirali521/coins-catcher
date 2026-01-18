@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -53,9 +54,9 @@ export default function DashboardPage() {
     return `${hours}:${minutes}:${seconds}`;
   };
 
-  const handleClaim = () => {
+  const handleClaim = async () => {
     if (canClaim && user) {
-      updateCoins(user.coins + CLAIM_AMOUNT);
+      await updateCoins(user.coins + CLAIM_AMOUNT);
       localStorage.setItem('lastClaimTimestamp', new Date().getTime().toString());
       setCanClaim(false);
       calculateTimeLeft();
@@ -122,7 +123,7 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent className="flex items-center justify-center text-6xl font-bold text-primary gap-4">
           <Coins className="h-16 w-16" />
-          <span>{user?.coins.toLocaleString()}</span>
+          <span>{user?.coins?.toLocaleString() ?? 0}</span>
         </CardContent>
       </Card>
 

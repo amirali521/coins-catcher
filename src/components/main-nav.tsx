@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -7,7 +8,8 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { Coins, Gift, Settings, Users, Wallet } from 'lucide-react';
+import { Coins, Gift, Settings, Users, Wallet, Shield } from 'lucide-react';
+import { useAuth } from '@/lib/auth';
 
 const links = [
   { href: '/dashboard', label: 'Dashboard', icon: Gift },
@@ -16,8 +18,11 @@ const links = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
+const adminLink = { href: '/admin', label: 'Admin', icon: Shield };
+
 export function MainNav() {
   const pathname = usePathname();
+  const { user } = useAuth();
 
   return (
     <SidebarMenu>
@@ -35,6 +40,20 @@ export function MainNav() {
           </SidebarMenuButton>
         </SidebarMenuItem>
       ))}
+      {user?.isAdmin && (
+        <SidebarMenuItem key={adminLink.href}>
+          <SidebarMenuButton
+            asChild
+            isActive={pathname === adminLink.href}
+            tooltip={adminLink.label}
+          >
+            <Link href={adminLink.href}>
+              <adminLink.icon />
+              <span>{adminLink.label}</span>
+            </Link>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      )}
     </SidebarMenu>
   );
 }

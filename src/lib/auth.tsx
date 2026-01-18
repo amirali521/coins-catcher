@@ -14,7 +14,8 @@ import {
   sendPasswordResetEmail as firebaseSendPasswordResetEmail,
   User as FirebaseUser,
 } from 'firebase/auth';
-import { auth } from '@/firebase/init';
+import { auth, db } from '@/firebase/init';
+import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc } from 'firebase/firestore';
 
 interface User {
   uid: string;
@@ -23,6 +24,7 @@ interface User {
   emailVerified: boolean;
   coins: number;
   referralCode: string;
+  isAdmin: boolean;
 }
 
 interface AuthContextType {
@@ -32,7 +34,7 @@ interface AuthContextType {
   login: (email: string, password?: string) => Promise<void>;
   signup: (name: string, email: string, password?: string) => Promise<void>;
   logout: () => void;
-  updateCoins: (newCoins: number) => void;
+  updateCoins: (newCoins: number) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   sendVerificationEmail: () => Promise<void>;
   sendPasswordResetEmail: (email: string) => Promise<void>;
@@ -40,41 +42,43 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const getAdditionalUserData = async (userId: string): Promise<{ coins: number; referralCode: string }> => {
-  console.log(`Fetching additional (mock) data for user ${userId}`);
-  return {
-    coins: 1250,
-    referralCode: `REF${userId.substring(0, 6).toUpperCase()}`,
-  };
-};
-
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
       if (fbUser) {
-        await fbUser.reload();
-        const freshFbUser = auth.currentUser;
-        setFirebaseUser(freshFbUser);
-
-        if (freshFbUser) {
-            const additionalData = await getAdditionalUserData(freshFbUser.uid);
+        setFirebaseUser(fbUser);
+        const userDocRef = doc(db, 'users', fbUser.uid);
+        
+        const unsubDoc = onSnapshot(userDocRef, (docSnap) => {
+          if (docSnap.exists()) {
+            const userData = docSnap.data();
             setUser({
-              uid: freshFbUser.uid,
-              email: freshFbUser.email,
-              displayName: freshFbUser.displayName,
-              emailVerified: freshFbUser.emailVerified,
-              ...additionalData,
+              uid: fbUser.uid,
+              email: fbUser.email,
+              displayName: fbUser.displayName,
+              emailVerified: fbUser.emailVerified,
+              coins: userData.coins,
+              referralCode: userData.referralCode,
+              isAdmin: userData.isAdmin || false,
             });
-        }
+          }
+          // If doc doesn't exist, it will be created on signup/google sign-in
+          setLoading(false);
+        }, (error) => {
+            console.error("Firestore snapshot error:", error);
+            setLoading(false);
+        });
+
+        return () => unsubDoc();
       } else {
         setFirebaseUser(null);
         setUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
@@ -84,36 +88,64 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!password) throw new Error("Password is required for email/password login.");
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
 
+    await userCredential.user.reload();
     if (!userCredential.user.emailVerified) {
-        await firebaseSignOut(auth);
-        const error: any = new Error("Email not verified. Please check your inbox.");
-        error.code = "auth/email-not-verified";
-        throw error;
+      await firebaseSignOut(auth);
+      const error: any = new Error("Email not verified. Please check your inbox.");
+      error.code = "auth/email-not-verified";
+      throw error;
     }
   };
   
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
-    await signInWithPopup(auth, provider);
+    const userCredential = await signInWithPopup(auth, provider);
+    const fbUser = userCredential.user;
+
+    const userDocRef = doc(db, 'users', fbUser.uid);
+    const docSnap = await getDoc(userDocRef);
+    if (!docSnap.exists()) {
+      await setDoc(userDocRef, {
+        uid: fbUser.uid,
+        email: fbUser.email,
+        displayName: fbUser.displayName,
+        coins: 0,
+        referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
+        isAdmin: false,
+        createdAt: serverTimestamp(),
+      });
+    }
   };
 
   const signup = async (name: string, email: string, password?: string) => {
     if (!password) throw new Error("Password is required for email/password signup.");
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    if (userCredential.user) {
-        await updateProfile(userCredential.user, { displayName: name });
-        await sendEmailVerification(userCredential.user);
-    }
+    const fbUser = userCredential.user;
+
+    await updateProfile(fbUser, { displayName: name });
+    
+    const userDocRef = doc(db, 'users', fbUser.uid);
+    await setDoc(userDocRef, {
+      uid: fbUser.uid,
+      email: fbUser.email,
+      displayName: name,
+      coins: 0,
+      referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
+      isAdmin: false,
+      createdAt: serverTimestamp(),
+    });
+
+    await sendEmailVerification(fbUser);
   };
 
   const logout = async () => {
     await firebaseSignOut(auth);
   };
 
-  const updateCoins = (newCoins: number) => {
+  const updateCoins = async (newCoins: number) => {
     if (user) {
-      setUser({ ...user, coins: newCoins });
-      console.log(`(Mock) Updated coins to ${newCoins} for user ${user.uid}`);
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, { coins: newCoins });
     }
   };
   
