@@ -28,6 +28,7 @@ export default function DashboardPage() {
 
   const [hourlyTimeLeft, setHourlyTimeLeft] = useState<number | null>(null);
   const [canClaimHourly, setCanClaimHourly] = useState(false);
+  const [hourlyAdLinkClicked, setHourlyAdLinkClicked] = useState(false);
   const [faucetTimeLeft, setFaucetTimeLeft] = useState<number | null>(null);
   const [canClaimFaucet, setCanClaimFaucet] = useState(false);
   const [canClaimDaily, setCanClaimDaily] = useState(false);
@@ -48,6 +49,9 @@ export default function DashboardPage() {
         } else {
             setCanClaimHourly(false);
             setHourlyTimeLeft(nextClaimTime - now);
+            if (hourlyAdLinkClicked) {
+              setHourlyAdLinkClicked(false);
+            }
         }
     } else {
         setCanClaimHourly(true);
@@ -78,7 +82,7 @@ export default function DashboardPage() {
     } else {
         setCanClaimDaily(true);
     }
-  }, [user]);
+  }, [user, hourlyAdLinkClicked]);
 
   useEffect(() => {
     calculateCooldowns();
@@ -114,13 +118,19 @@ export default function DashboardPage() {
 
   const handleHourlyClaim = async () => {
     if (canClaimHourly && user) {
+      if (!hourlyAdLinkClicked) {
+        window.open('https://www.effectivegatecpm.com/rjxuuya9?key=0ca0a474faa38ad1b07174333d291e37', '_blank');
+        setHourlyAdLinkClicked(true);
+        return;
+      }
+
       try {
         await claimHourlyReward(HOURLY_CLAIM_AMOUNT);
         toast({
           title: "🎉 Reward Claimed!",
           description: `You have received ${HOURLY_CLAIM_AMOUNT} coins.`,
         });
-        window.open('https://adsterra.com/', '_blank');
+        setHourlyAdLinkClicked(false); // Reset after successful claim
       } catch (error) {
         console.error("Failed to claim reward:", error);
         toast({
@@ -229,7 +239,7 @@ export default function DashboardPage() {
             onClick={handleHourlyClaim}
             disabled={!canClaimHourly}
           >
-            {canClaimHourly ? "Claim Now" : "Come Back Later"}
+            {canClaimHourly ? (hourlyAdLinkClicked ? 'Confirm Claim' : 'Claim Now') : "Come Back Later"}
           </Button>
         </CardContent>
       </Card>
