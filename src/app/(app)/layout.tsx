@@ -18,10 +18,13 @@ import { UserNav } from '@/components/user-nav';
 import { MainNav } from '@/components/main-nav';
 import { useAuth } from '@/lib/auth';
 import { Coins } from 'lucide-react';
+import { useAdBlockDetector } from '@/hooks/use-ad-block-detector';
+import { AdBlockerOverlay } from '@/components/ad-blocker-overlay';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const { adBlockerDetected } = useAdBlockDetector();
 
   React.useEffect(() => {
     if (!loading) {
@@ -39,6 +42,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
+  }
+
+  if (adBlockerDetected) {
+    return <AdBlockerOverlay />;
   }
 
   return (
