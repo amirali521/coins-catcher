@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -8,6 +7,7 @@ import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Gift, Clock, Coins, CheckCircle } from "lucide-react";
 import { BannerAd } from "@/components/ads/banner-ad";
+import FaucetBannerAd from "@/components/ads/faucet-banner-ad";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { isToday } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -116,8 +116,7 @@ export default function DashboardPage() {
 
   const handleFaucetAdClick = () => {
     setFaucetAdClicked(true);
-    // Simulate Popunder ad
-    window.open('https://adsterra.com/', '_blank');
+    // The ad script should handle opening the new window.
   };
 
   const handleFaucetClaim = async () => {
@@ -293,7 +292,7 @@ export default function DashboardPage() {
                         Claim {FAUCET_CLAIM_AMOUNT} Coins Faucet
                     </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-80" align="center">
+                <PopoverContent className="w-auto" align="center">
                     <div className="grid gap-4">
                         <div className="space-y-1">
                             <h4 className="font-medium leading-none">Click the ad to claim</h4>
@@ -302,15 +301,12 @@ export default function DashboardPage() {
                             </p>
                         </div>
                         <div 
-                            className="rounded-md border-2 border-dashed border-primary/50 cursor-pointer hover:border-primary bg-muted/20 transition-colors"
                             onClick={handleFaucetAdClick}
                             role="button"
                             tabIndex={0}
+                            className="cursor-pointer"
                         >
-                            <div className="p-4 flex flex-col items-center justify-center h-28 text-center">
-                                <p className="font-semibold text-primary text-lg">Banner Ad</p>
-                                <p className="text-muted-foreground text-xs mt-1">Click here to unlock your reward</p>
-                            </div>
+                            <FaucetBannerAd />
                         </div>
                         <Button onClick={handleFaucetClaim} disabled={!faucetAdClicked || !canClaimFaucet}>
                             <Gift className="mr-2 h-4 w-4" />
