@@ -12,13 +12,13 @@ import { Gift, Settings, Wallet, Shield, UserPlus } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 
 const links = [
-  { href: '/dashboard', label: 'Dashboard', icon: Gift },
-  { href: '/wallet', label: 'Wallet', icon: Wallet },
-  { href: '/referrals', label: 'Referrals', icon: UserPlus },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  { href: '/app/dashboard', label: 'Dashboard', icon: Gift },
+  { href: '/app/wallet', label: 'Wallet', icon: Wallet },
+  { href: '/app/referrals', label: 'Referrals', icon: UserPlus },
+  { href: '/app/settings', label: 'Settings', icon: Settings },
 ];
 
-const adminLink = { href: '/admin', label: 'Admin', icon: Shield };
+const adminLink = { href: '/app/admin', label: 'Admin', icon: Shield };
 
 export function MainNav() {
   const pathname = usePathname();
