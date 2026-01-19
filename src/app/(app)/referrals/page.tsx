@@ -93,7 +93,7 @@ export default function ReferralsPage() {
       </div>
 
       <Tabs defaultValue="link" className="w-full">
-        <TabsList className="flex h-auto w-full flex-wrap justify-start">
+        <TabsList className="flex h-auto w-full flex-wrap justify-center">
           <TabsTrigger value="link">
             <LinkIcon className="mr-2 h-4 w-4" />
             Your Link

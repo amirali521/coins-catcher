@@ -434,7 +434,7 @@ export default function WalletPage() {
       </div>
 
        <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="flex h-auto w-full flex-wrap justify-start">
+        <TabsList className="flex h-auto w-full flex-wrap justify-center">
           <TabsTrigger value="overview"><WalletIcon className="mr-2 h-4 w-4" /> Overview</TabsTrigger>
           <TabsTrigger value="transfer"><ArrowRightLeft className="mr-2 h-4 w-4" /> Transfer</TabsTrigger>
           <TabsTrigger value="purchase"><ShoppingBag className="mr-2 h-4 w-4" /> Withdraw & Purchase</TabsTrigger>

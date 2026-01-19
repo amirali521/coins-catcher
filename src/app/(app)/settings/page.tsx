@@ -233,7 +233,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="flex h-auto w-full flex-wrap justify-start">
+        <TabsList className="flex h-auto w-full flex-wrap justify-center">
           <TabsTrigger value="profile">
             <User className="mr-2 h-4 w-4"/> Profile
           </TabsTrigger>
