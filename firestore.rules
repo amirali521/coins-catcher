@@ -19,13 +19,11 @@ service cloud.firestore {
     }
     
     match /users/{userId} {
-      // Admins can read all user profiles.
-      // Users can read their own profile.
-      allow read: if isOwner(userId) || isAdmin();
+      // Allow any authenticated user to read any profile for transfers.
+      allow read: if request.auth != null;
       
       // Any authenticated user can query the collection.
       // This is required for referral code lookup and the admin user list.
-      // NOTE: This allows any user to see data for all other users if they query the collection.
       allow list: if request.auth != null;
 
       // Users can create their own profile on signup.
@@ -35,17 +33,25 @@ service cloud.firestore {
                     && request.resource.data.coins == 200;
       
       // Users can update their own document, but cannot change their admin status.
-      // Coin logic is handled on the client, which is a security risk.
-      // In a production app, this should be moved to a trusted server environment.
-      allow update: if isOwner(userId)
-                    && request.resource.data.admin == resource.data.admin;
+      // Other users can ONLY update the 'coins' field (for receiving transfers),
+      // and cannot change the admin status. NOTE: In a production app, this kind
+      // of logic should be handled in a trusted server environment (e.g. Cloud Functions).
+      allow update: if request.resource.data.admin == resource.data.admin &&
+                       (isOwner(userId) || 
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins']));
 
       // Nobody can delete user documents.
       allow delete: if false;
 
       match /transactions/{transactionId} {
-        // Users can read and create their own transactions. Transactions are immutable.
-        allow read, list, create: if isOwner(userId);
+        // Users can read/list their own transactions.
+        allow read, list: if isOwner(userId);
+        
+        // A user can create their own transaction log.
+        // Another user can create a transaction log for them ONLY if it's a credit (amount > 0).
+        allow create: if isOwner(userId) || request.resource.data.amount > 0;
+        
+        // Transactions are immutable.
         allow update, delete: if false;
       }
     }
