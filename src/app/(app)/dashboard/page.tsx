@@ -246,10 +246,17 @@ export default function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>Your Balance</CardTitle>
+          <CardDescription>Your total coins and their estimated PKR value.</CardDescription>
         </CardHeader>
-        <CardContent className="flex items-center justify-center text-6xl font-bold text-primary gap-4">
-          <Coins className="h-16 w-16" />
-          <span>{formatLargeNumber(user?.coins)}</span>
+        <CardContent className="flex flex-col items-center justify-center gap-1 pt-2">
+            <div className="flex items-center justify-center text-6xl font-bold text-primary gap-4">
+              <Coins className="h-16 w-16" />
+              <span>{formatLargeNumber(user?.coins)}</span>
+            </div>
+            <div className="w-full flex justify-between items-baseline text-sm px-4">
+                <span className="text-muted-foreground">{user?.coins?.toLocaleString() ?? '0'} coins</span>
+                <span className="font-semibold text-green-500">~ {user?.pkrBalance?.toLocaleString() ?? '0'} PKR</span>
+            </div>
         </CardContent>
       </Card>
 
