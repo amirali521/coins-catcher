@@ -33,9 +33,7 @@ service cloud.firestore {
         // SCENARIO 1: A user is updating their OWN profile (e.g., claiming rewards, changing settings).
         ( isOwner(userId)
           // They are not allowed to change their admin status, or unblock/enable logout for themselves.
-          && request.resource.data.admin == resource.data.admin
-          && request.resource.data.blocked == resource.data.blocked
-          && request.resource.data.logoutDisabled == resource.data.logoutDisabled
+          && !(request.resource.data.diff(resource.data).affectedKeys().hasAny(['admin', 'blocked', 'logoutDisabled']))
         )
         // SCENARIO 2: ANOTHER user is updating this user's profile.
         || ( !isOwner(userId) && (
