@@ -15,7 +15,7 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth, db } from '@/firebase/init';
-import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection, addDoc, runTransaction } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection, addDoc, runTransaction, writeBatch } from 'firebase/firestore';
 import { isToday, isYesterday } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
@@ -28,6 +28,8 @@ interface User {
   pkrBalance: number;
   referralCode: string;
   admin: boolean;
+  blocked?: boolean;
+  disableLogout?: boolean;
   lastClaimTimestamp?: { seconds: number; nanoseconds: number; } | null; // Hourly
   dailyStreakCount: number;
   lastDailyClaim: { seconds: number; nanoseconds: number; } | null;
@@ -59,6 +61,8 @@ interface AuthContextType {
   giveBonus: (userId: string, amount: number, reason: string) => Promise<void>;
   updateWithdrawalDetails: (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'jazzcashName' | 'easypaisaNumber' | 'easypaisaName'>>) => Promise<void>;
   transferFunds: (recipientId: string, amount: number, currency: 'coins' | 'pkr') => Promise<void>;
+  updateUserBlockStatus: (userId: string, blocked: boolean) => Promise<void>;
+  updateUserLogoutStatus: (userId: string, disableLogout: boolean) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -71,6 +75,15 @@ const addTransaction = async (userId: string, type: string, amount: number, desc
         description,
         date: serverTimestamp(),
     });
+};
+
+const addActivityLog = async (userId: string, type: 'login' | 'logout') => {
+  const activityRef = collection(db, 'users', userId, 'activity');
+  await addDoc(activityRef, {
+    type,
+    timestamp: serverTimestamp(),
+    ip: 'not_tracked', // For privacy, but could be added
+  });
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -111,6 +124,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           if (docSnap.exists() && coinToPkrRate !== null) {
             const userData = docSnap.data();
 
+             if (userData.blocked) {
+              firebaseSignOut(auth);
+              toast({
+                variant: 'destructive',
+                title: 'Account Blocked',
+                description: 'Your account has been blocked by an administrator.',
+                duration: Infinity,
+              });
+              setUser(null);
+              setLoading(false);
+              return;
+            }
+
             const pkrBalance = Math.floor((userData.coins / 100000) * coinToPkrRate);
 
             setUser({
@@ -122,6 +148,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               pkrBalance: pkrBalance,
               referralCode: userData.referralCode,
               admin: userData.admin || false,
+              blocked: userData.blocked || false,
+              disableLogout: userData.disableLogout || false,
               lastClaimTimestamp: userData.lastClaimTimestamp || null,
               dailyStreakCount: userData.dailyStreakCount || 0,
               lastDailyClaim: userData.lastDailyClaim || null,
@@ -165,14 +193,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const login = useCallback(async (email: string, password?: string) => {
     if (!password) throw new Error("Password is required for email/password login.");
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
+    const fbUser = userCredential.user;
 
-    await userCredential.user.reload();
-    if (!userCredential.user.emailVerified) {
+    const userDocRef = doc(db, 'users', fbUser.uid);
+    const userDoc = await getDoc(userDocRef);
+    if(userDoc.exists() && userDoc.data().blocked) {
+      await firebaseSignOut(auth);
+      throw new Error("This account has been blocked by an administrator.");
+    }
+
+    await fbUser.reload();
+    if (!fbUser.emailVerified) {
       await firebaseSignOut(auth);
       const error: any = new Error("Email not verified. Please check your inbox.");
       error.code = "auth/email-not-verified";
       throw error;
     }
+    await addActivityLog(fbUser.uid, 'login');
   }, []);
   
   const signInWithGoogle = useCallback(async (referralCode?: string | null) => {
@@ -185,6 +222,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const userDocRef = doc(db, 'users', fbUser.uid);
     const docSnap = await getDoc(userDocRef);
+
+    if (docSnap.exists() && docSnap.data().blocked) {
+        await firebaseSignOut(auth);
+        throw new Error("This account has been blocked by an administrator.");
+    }
 
     if (!docSnap.exists()) {
         if (referralCode) {
@@ -216,6 +258,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
         referredBy: referrerId,
         admin: false,
+        blocked: false,
+        disableLogout: false,
         createdAt: serverTimestamp(),
         lastClaimTimestamp: null,
         dailyStreakCount: 0,
@@ -224,6 +268,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
     }
+    await addActivityLog(fbUser.uid, 'login');
     return { referred };
   }, []);
 
@@ -267,6 +312,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
       referredBy: referrerId,
       admin: false,
+      blocked: false,
+      disableLogout: false,
       createdAt: serverTimestamp(),
       lastClaimTimestamp: null,
       dailyStreakCount: 0,
@@ -280,6 +327,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const logout = useCallback(async () => {
+    if (user?.disableLogout) {
+      toast({
+        variant: 'destructive',
+        title: 'Logout Disabled',
+        description: 'Your logout function has been disabled by an administrator.',
+      });
+      return;
+    }
+    if (user) {
+      await addActivityLog(user.uid, 'logout');
+    }
     try {
       await firebaseSignOut(auth);
     } catch (error: any) {
@@ -289,7 +347,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             description: error.message.replace('Firebase: ', ''),
         });
     }
-  }, [toast]);
+  }, [user, toast]);
 
   const claimHourlyReward = useCallback(async (amount: number) => {
     if (user) {
@@ -484,7 +542,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await updateDoc(userRef, details);
   }, [user]);
 
-  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds };
+  const updateUserBlockStatus = useCallback(async (userId: string, blocked: boolean) => {
+    if (!user?.admin) throw new Error("You are not authorized to perform this action.");
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, { blocked });
+  }, [user]);
+
+  const updateUserLogoutStatus = useCallback(async (userId: string, disableLogout: boolean) => {
+    if (!user?.admin) throw new Error("You are not authorized to perform this action.");
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, { disableLogout });
+  }, [user]);
+
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds, updateUserBlockStatus, updateUserLogoutStatus };
 
   return (
     <AuthContext.Provider value={value}>

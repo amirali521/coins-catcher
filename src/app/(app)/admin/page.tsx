@@ -1,14 +1,16 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc, limit } from 'firebase/firestore';
+import { useRouter } from 'next/navigation';
+import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc, limit, where, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase/init';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
-import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon, Settings, LayoutDashboard, UserCog } from 'lucide-react';
+import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon, Settings, LayoutDashboard, UserCog, ShieldAlert } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -29,6 +31,8 @@ interface AppUser {
     email: string;
     coins: number;
     admin: boolean;
+    blocked?: boolean;
+    disableLogout?: boolean;
     createdAt: { seconds: number; nanoseconds: number; } | null;
     referredBy?: string;
 }
@@ -436,6 +440,8 @@ export default function AdminPage() {
     const [users, setUsers] = useState<AppUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [bonusUser, setBonusUser] = useState<AppUser | null>(null);
+    const router = useRouter();
+    const [activityCounts, setActivityCounts] = useState<Record<string, number>>({});
 
     useEffect(() => {
         const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
@@ -453,6 +459,24 @@ export default function AdminPage() {
 
         return () => unsubscribe();
     }, []);
+
+    useEffect(() => {
+        if (users.length === 0) return;
+
+        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+        users.forEach(user => {
+            const activityQuery = query(
+                collection(db, 'users', user.uid, 'activity'),
+                where('timestamp', '>=', twentyFourHoursAgo),
+                where('type', '==', 'login')
+            );
+
+            getDocs(activityQuery).then(snapshot => {
+                setActivityCounts(prev => ({ ...prev, [user.uid]: snapshot.size }));
+            });
+        });
+    }, [users]);
 
     const getInitials = (name: string | null) => {
         if (!name) return "U";
@@ -484,15 +508,15 @@ export default function AdminPage() {
                  <Card>
                     <CardHeader>
                         <CardTitle>Users</CardTitle>
-                        <CardDescription>A list of all registered users.</CardDescription>
+                        <CardDescription>A list of all registered users. Click a user to view their details.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Table>
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>User</TableHead>
+                                    <TableHead>Status</TableHead>
                                     <TableHead>Coins</TableHead>
-                                    <TableHead>Role</TableHead>
                                     <TableHead>Joined</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
@@ -505,7 +529,7 @@ export default function AdminPage() {
                                         </TableCell>
                                     </TableRow>
                                 ) : users.map((user) => (
-                                    <TableRow key={user.uid}>
+                                    <TableRow key={user.uid} onClick={() => router.push(`/admin/users/${user.uid}`)} className="cursor-pointer">
                                         <TableCell>
                                             <div className="flex items-center gap-3">
                                                 <Avatar>
@@ -513,24 +537,31 @@ export default function AdminPage() {
                                                     <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
                                                 </Avatar>
                                                 <div>
-                                                    <p className="font-medium">{user.displayName || 'N/A'}</p>
+                                                    <p className="font-medium flex items-center gap-2">
+                                                        {user.displayName || 'N/A'}
+                                                        {(activityCounts[user.uid] || 0) > 5 && (
+                                                            <ShieldAlert className="h-4 w-4 text-destructive" title="Suspicious Activity" />
+                                                        )}
+                                                    </p>
                                                     <p className="text-sm text-muted-foreground">{user.email}</p>
                                                 </div>
                                             </div>
                                         </TableCell>
-                                        <TableCell>{user.coins?.toLocaleString()}</TableCell>
                                         <TableCell>
-                                            {user.admin ? (
+                                            {user.blocked ? (
+                                                <Badge variant="destructive">Blocked</Badge>
+                                            ) : user.admin ? (
                                                 <Badge>Admin</Badge>
                                             ) : (
                                                 <Badge variant="secondary">User</Badge>
                                             )}
                                         </TableCell>
+                                        <TableCell>{user.coins?.toLocaleString()}</TableCell>
                                         <TableCell className="text-muted-foreground">
                                             {user.createdAt ? formatDistanceToNow(new Date(user.createdAt.seconds * 1000), { addSuffix: true }) : 'N/A'}
                                         </TableCell>
                                         <TableCell className="text-right">
-                                            <Button variant="ghost" size="sm" onClick={() => setBonusUser(user)}>
+                                            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setBonusUser(user); }}>
                                                 <Gift className="mr-2 h-4 w-4" />
                                                 Bonus
                                             </Button>
