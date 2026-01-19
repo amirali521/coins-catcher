@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
@@ -98,7 +99,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     const unsubscribeAuth = onAuthStateChanged(auth, (fbUser) => {
       // First, unsubscribe from any previous user's document listener
-      unsubDoc();
+      if (unsubDoc) {
+        unsubDoc();
+      }
 
       if (fbUser) {
         setFirebaseUser(fbUser);
@@ -197,10 +200,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         }
       
+        // Handle unique display name for Google Sign-In
+        const usersRef = collection(db, 'users');
+        let finalDisplayName = fbUser.displayName || `user_${fbUser.uid.substring(0, 6)}`;
+        const qName = query(usersRef, where('displayName', '==', finalDisplayName));
+        const nameQuerySnapshot = await getDocs(qName);
+
+        if (!nameQuerySnapshot.empty) {
+          // If name exists, append part of the UID to make it unique
+          finalDisplayName = `${finalDisplayName}_${fbUser.uid.substring(0, 4)}`;
+        }
+
       await setDoc(userDocRef, {
         uid: fbUser.uid,
         email: fbUser.email,
-        displayName: fbUser.displayName,
+        displayName: finalDisplayName,
         coins: initialCoins,
         referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
         referredBy: referrerId,
@@ -219,13 +233,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signup = async (name: string, email: string, password?: string, referralCode?: string | null) => {
     if (!password) throw new Error("Password is required for email/password signup.");
     
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where('displayName', '==', name));
+    const nameQuerySnapshot = await getDocs(q);
+    if (!nameQuerySnapshot.empty) {
+      throw new Error(`Username "${name}" is already taken. Please choose another one.`);
+    }
+
     let referred = false;
     let referrerId: string | null = null;
     const initialCoins = 200; // Universal welcome bonus
 
     if (referralCode) {
-        const q = query(collection(db, 'users'), where('referralCode', '==', referralCode), limit(1));
-        const querySnapshot = await getDocs(q);
+        const referralQuery = query(collection(db, 'users'), where('referralCode', '==', referralCode), limit(1));
+        const querySnapshot = await getDocs(referralQuery);
         if (!querySnapshot.empty) {
             const referrerDoc = querySnapshot.docs[0];
             referrerId = referrerDoc.id;
@@ -366,60 +387,66 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       throw new Error("Transfer amount must be positive.");
     }
 
-    await runTransaction(db, async (transaction) => {
-      const senderRef = doc(db, 'users', user.uid);
-      const recipientRef = doc(db, 'users', recipientId);
+    try {
+      await runTransaction(db, async (transaction) => {
+        const senderRef = doc(db, 'users', user.uid);
+        const recipientRef = doc(db, 'users', recipientId);
 
-      const [senderDoc, recipientDoc] = await Promise.all([
-        transaction.get(senderRef),
-        transaction.get(recipientRef),
-      ]);
+        const [senderDoc, recipientDoc] = await Promise.all([
+          transaction.get(senderRef),
+          transaction.get(recipientRef),
+        ]);
 
-      if (!senderDoc.exists()) {
-        throw new Error("Sender document not found.");
-      }
-      if (!recipientDoc.exists()) {
-        throw new Error("Recipient User ID not found.");
-      }
-      
-      const senderData = senderDoc.data();
-      const recipientData = recipientDoc.data();
-      let coinsToTransfer = 0;
-      let description = "";
-
-      if (currency === 'coins') {
-        coinsToTransfer = amount;
-        if (senderData.coins < coinsToTransfer) {
-          throw new Error("Insufficient coin balance.");
+        if (!senderDoc.exists()) {
+          throw new Error("Sender document not found.");
         }
-        description = `${amount.toLocaleString()} coins`;
-      } else { // currency === 'pkr'
-        if (coinToPkrRate === null || coinToPkrRate <= 0) {
-          throw new Error("Cannot process transaction: conversion rate is invalid.");
+        if (!recipientDoc.exists()) {
+          throw new Error("Recipient User ID not found.");
         }
-        const senderPkrBalance = Math.floor((senderData.coins / 100000) * coinToPkrRate);
-        if (senderPkrBalance < amount) {
-          throw new Error("Insufficient PKR balance.");
-        }
-        coinsToTransfer = Math.ceil((amount / coinToPkrRate) * 100000);
-         if (senderData.coins < coinsToTransfer) {
-          throw new Error("Insufficient coin balance for this PKR amount.");
-        }
-        description = `${amount.toLocaleString()} PKR`;
-      }
+        
+        const senderData = senderDoc.data();
+        const recipientData = recipientDoc.data();
+        let coinsToTransfer = 0;
+        let description = "";
 
-      // Perform updates within the transaction
-      transaction.update(senderRef, { coins: increment(-coinsToTransfer) });
-      transaction.update(recipientRef, { coins: increment(coinsToTransfer) });
+        if (currency === 'coins') {
+          coinsToTransfer = amount;
+          if (senderData.coins < coinsToTransfer) {
+            throw new Error("Insufficient coin balance.");
+          }
+          description = `${amount.toLocaleString()} coins`;
+        } else { // currency === 'pkr'
+          if (coinToPkrRate === null || coinToPkrRate <= 0) {
+            throw new Error("Cannot process transaction: conversion rate is invalid.");
+          }
+          const senderPkrBalance = Math.floor((senderData.coins / 100000) * coinToPkrRate);
+          if (senderPkrBalance < amount) {
+            throw new Error("Insufficient PKR balance.");
+          }
+          coinsToTransfer = Math.ceil((amount / coinToPkrRate) * 100000);
+          if (senderData.coins < coinsToTransfer) {
+            throw new Error("Insufficient coin balance for this PKR amount.");
+          }
+          description = `${amount.toLocaleString()} PKR`;
+        }
 
-      // Create transaction logs (can't use serverTimestamp in a transaction)
-      const now = new Date();
-      const senderLog = { type: 'transfer-sent', amount: -coinsToTransfer, description: `Sent ${description} to ${recipientData.displayName || recipientId}`, date: now };
-      const recipientLog = { type: 'transfer-received', amount: coinsToTransfer, description: `Received ${description} from ${senderData.displayName || user.uid}`, date: now };
-      
-      transaction.set(doc(collection(db, 'users', user.uid, 'transactions')), senderLog);
-      transaction.set(doc(collection(db, 'users', recipientId, 'transactions')), recipientLog);
-    });
+        // Perform updates within the transaction
+        transaction.update(senderRef, { coins: increment(-coinsToTransfer) });
+        transaction.update(recipientRef, { coins: increment(coinsToTransfer) });
+
+        // Create transaction logs (can't use serverTimestamp in a transaction)
+        const now = new Date();
+        const senderLog = { type: 'transfer-sent', amount: -coinsToTransfer, description: `Sent ${description} to ${recipientData.displayName || recipientId}`, date: now };
+        const recipientLog = { type: 'transfer-received', amount: coinsToTransfer, description: `Received ${description} from ${senderData.displayName || user.uid}`, date: now };
+        
+        transaction.set(doc(collection(db, 'users', user.uid, 'transactions')), senderLog);
+        transaction.set(doc(collection(db, 'users', recipientId, 'transactions')), recipientLog);
+      });
+    } catch(e: any) {
+        // The transaction function automatically throws on failure, so we catch it here.
+        // We re-throw so the UI can catch it and display a message.
+        throw new Error(e.message || "Transfer failed. Please try again.");
+    }
   };
   
   const sendVerificationEmail = async () => {
@@ -470,3 +497,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+    
