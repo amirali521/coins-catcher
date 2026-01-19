@@ -630,7 +630,7 @@ function TopEarnersCard() {
                                <div className="flex items-center gap-3">
                                     <span className="font-bold text-lg text-muted-foreground">{index + 1}</span>
                                     <Avatar className="h-8 w-8">
-                                        <AvatarImage src={`https://avatar.vercel.sh/${user.email}.png`} />
+                                        <AvatarImage src={`https://avatar.vercel.sh/${user.uid}.png`} />
                                         <AvatarFallback>{user.displayName?.charAt(0) ?? 'U'}</AvatarFallback>
                                     </Avatar>
                                     <span className="font-medium truncate">{user.displayName}</span>
@@ -683,7 +683,7 @@ function TopReferrersCard({ allUsers, loading: loadingUsers }: { allUsers: AppUs
                                 <div className="flex items-center gap-3">
                                     <span className="font-bold text-lg text-muted-foreground">{index + 1}</span>
                                     <Avatar className="h-8 w-8">
-                                        <AvatarImage src={`https://avatar.vercel.sh/${user.email}.png`} />
+                                        <AvatarImage src={`https://avatar.vercel.sh/${user.uid}.png`} />
                                         <AvatarFallback>{user.displayName?.charAt(0) ?? 'U'}</AvatarFallback>
                                     </Avatar>
                                     <span className="font-medium truncate">{user.displayName}</span>
@@ -858,7 +858,7 @@ export default function AdminPage() {
                                         <TableCell>
                                             <div className="flex items-center gap-3">
                                                 <Avatar>
-                                                    <AvatarImage src={`https://avatar.vercel.sh/${user.email}.png`} alt={user.displayName} />
+                                                    <AvatarImage src={`https://avatar.vercel.sh/${user.uid}.png`} alt={user.displayName} />
                                                     <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
                                                 </Avatar>
                                                 <div>

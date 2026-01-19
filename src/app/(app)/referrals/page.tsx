@@ -168,7 +168,7 @@ export default function ReferralsPage() {
                                     <TableCell>
                                         <div className="flex items-center gap-3">
                                             <Avatar>
-                                                <AvatarImage src={`https://avatar.vercel.sh/${refUser.email}.png`} alt={refUser.displayName} />
+                                                <AvatarImage src={`https://avatar.vercel.sh/${refUser.uid}.png`} alt={refUser.displayName} />
                                                 <AvatarFallback>{getInitials(refUser.displayName)}</AvatarFallback>
                                             </Avatar>
                                             <div>

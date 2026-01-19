@@ -119,7 +119,7 @@ export function UserNav() {
   };
 
   const displayName = user.displayName || user.email?.split('@')[0] || "User";
-  const avatarUrl = user.email ? `https://avatar.vercel.sh/${user.email}.png` : '';
+  const avatarUrl = user.uid ? `https://avatar.vercel.sh/${user.uid}.png` : '';
 
   return (
     <div className="flex items-center gap-2">
