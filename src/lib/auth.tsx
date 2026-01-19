@@ -65,6 +65,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [coinToPkrRate, setCoinToPkrRate] = useState<number | null>(null);
+
+  // Effect to fetch and listen to the wallet config for the conversion rate
+  useEffect(() => {
+    const configRef = doc(db, 'config', 'wallet');
+    const unsubConfig = onSnapshot(configRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setCoinToPkrRate(docSnap.data().coinToPkrRate || 1);
+      } else {
+        setCoinToPkrRate(1); // Default value if not set
+      }
+    }, () => {
+      setCoinToPkrRate(1); // Fallback on error
+    });
+    return () => unsubConfig();
+  }, []);
+
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
@@ -73,15 +90,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const userDocRef = doc(db, 'users', fbUser.uid);
         
         const unsubDoc = onSnapshot(userDocRef, (docSnap) => {
-          if (docSnap.exists()) {
+          // We need both user data and the rate to proceed
+          if (docSnap.exists() && coinToPkrRate !== null) {
             const userData = docSnap.data();
+
+            // Automatically calculate PKR balance based on the current rate
+            const pkrBalance = Math.floor((userData.coins / 100000) * coinToPkrRate);
+
             setUser({
               uid: fbUser.uid,
               email: fbUser.email,
               displayName: fbUser.displayName,
               emailVerified: fbUser.emailVerified,
               coins: userData.coins,
-              pkrBalance: userData.pkrBalance || 0,
+              pkrBalance: pkrBalance, // Dynamically calculated
               referralCode: userData.referralCode,
               admin: userData.admin || false,
               lastClaimTimestamp: userData.lastClaimTimestamp || null,
@@ -89,9 +111,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               lastDailyClaim: userData.lastDailyClaim || null,
               lastFaucetClaimTimestamp: userData.lastFaucetClaimTimestamp || null,
             });
+             setLoading(false);
+          } else if (!docSnap.exists()){
+             // If user doc doesn't exist yet (e.g., during signup), don't show loading forever
+             setLoading(false);
           }
-          // If doc doesn't exist, it will be created on signup/google sign-in
-          setLoading(false);
         }, (error) => {
             console.error("Firestore snapshot error:", error);
             setLoading(false);
@@ -105,8 +129,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
+    // Cleanup subscription on component unmount
     return () => unsubscribe();
-  }, []);
+  }, [coinToPkrRate]); // Rerun this effect if the conversion rate changes
+
 
   const login = async (email: string, password?: string) => {
     if (!password) throw new Error("Password is required for email/password login.");
@@ -150,7 +176,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         email: fbUser.email,
         displayName: fbUser.displayName,
         coins: initialCoins,
-        pkrBalance: 0,
         referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
         referredBy: referrerId,
         admin: false,
@@ -195,7 +220,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email: fbUser.email,
       displayName: name,
       coins: initialCoins,
-      pkrBalance: 0,
       referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
       referredBy: referrerId,
       admin: false,
