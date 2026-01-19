@@ -8,13 +8,14 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { Coins, Gift, Settings, Users, Wallet, Shield } from 'lucide-react';
+import { Gift, Settings, Users, Wallet, Shield, UserPlus } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 
 const links = [
   { href: '/dashboard', label: 'Dashboard', icon: Gift },
   { href: '/wallet', label: 'Wallet', icon: Wallet },
-  { href: '/referrals', label: 'Referrals', icon: Users },
+  { href: '/friends', label: 'Friends', icon: Users },
+  { href: '/referrals', label: 'Referrals', icon: UserPlus },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -30,7 +31,7 @@ export function MainNav() {
         <SidebarMenuItem key={link.href}>
           <SidebarMenuButton
             asChild
-            isActive={pathname === link.href}
+            isActive={pathname.startsWith(link.href)}
             tooltip={link.label}
           >
             <Link href={link.href}>
@@ -44,7 +45,7 @@ export function MainNav() {
         <SidebarMenuItem key={adminLink.href}>
           <SidebarMenuButton
             asChild
-            isActive={pathname === adminLink.href}
+            isActive={pathname.startsWith(adminLink.href)}
             tooltip={adminLink.label}
           >
             <Link href={adminLink.href}>

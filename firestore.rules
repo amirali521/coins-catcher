@@ -55,5 +55,28 @@ service cloud.firestore {
         allow update, delete: if false;
       }
     }
+
+    match /friendRequests/{requestId} {
+      function isParticipant() {
+        return request.auth.uid in resource.data.participants;
+      }
+      
+      // A user can read a request if they are a participant.
+      allow read: if isParticipant();
+      
+      // A user can create a request if they are the sender, status is pending, 
+      // and they are in the participants array.
+      allow create: if request.auth.uid == request.resource.data.from
+                    && request.resource.data.status == 'pending'
+                    && request.auth.uid in request.resource.data.participants;
+
+      // The recipient can update the status from 'pending' to 'accepted' or 'declined'.
+      allow update: if request.auth.uid == resource.data.to
+                    && resource.data.status == 'pending'
+                    && request.resource.data.status in ['accepted', 'declined'];
+                    
+      // A participant can delete a declined or accepted request (unfriend)
+      allow delete: if isParticipant() && resource.data.status != 'pending';
+    }
   }
 }

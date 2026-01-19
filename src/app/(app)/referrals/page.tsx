@@ -13,7 +13,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, Gift, Users, Loader2, Link as LinkIcon } from "lucide-react";
+import { Copy, Gift, UserPlus, Loader2, Link as LinkIcon } from "lucide-react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/firebase/init";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -99,7 +99,7 @@ export default function ReferralsPage() {
             Your Link
           </TabsTrigger>
           <TabsTrigger value="referrals">
-            <Users className="mr-2 h-4 w-4" />
+            <UserPlus className="mr-2 h-4 w-4" />
             Your Referrals ({referredUsers.length})
           </TabsTrigger>
         </TabsList>
@@ -133,7 +133,7 @@ export default function ReferralsPage() {
           <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    <Users />
+                    <UserPlus />
                     Your Referrals ({referredUsers.length})
                 </CardTitle>
                 <CardDescription>

@@ -119,7 +119,16 @@ function WalletActions() {
     }
 
     const handlePurchase = async (pkg: Package, type: 'UC' | 'Diamond', index: number) => {
-        if (!user || (user.pkrBalance < pkg.price)) {
+        if (!user) {
+             toast({
+                variant: "destructive",
+                title: "Authentication Error",
+                description: `You must be logged in to make a purchase.`,
+            });
+            return;
+        }
+
+        if (user.pkrBalance < pkg.price) {
             toast({
                 variant: "destructive",
                 title: "Insufficient Balance",
@@ -308,7 +317,7 @@ function TransferCard() {
         <Card>
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                    <Users />
+                    <ArrowRightLeft />
                     Transfer Funds
                 </CardTitle>
                 <CardDescription>
