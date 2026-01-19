@@ -9,8 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
-import { Loader2, PlusCircle, Save, Trash2 } from 'lucide-react';
-import { useForm, useFieldArray, Controller } from 'react-hook-form';
+import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon } from 'lucide-react';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/lib/auth';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 
 interface AppUser {
     uid: string;
@@ -26,6 +29,7 @@ interface AppUser {
     coins: number;
     admin: boolean;
     createdAt: { seconds: number; nanoseconds: number; } | null;
+    referredBy?: string;
 }
 
 const packageSchema = z.object({
@@ -40,6 +44,93 @@ const walletSettingsSchema = z.object({
 });
 
 type WalletSettingsForm = z.infer<typeof walletSettingsSchema>;
+
+const bonusFormSchema = z.object({
+    amount: z.coerce.number().min(1, "Bonus amount must be positive."),
+    reason: z.string().min(3, "Please provide a reason.").max(100),
+});
+type BonusForm = z.infer<typeof bonusFormSchema>;
+
+function BonusDialog({ user, isOpen, onClose }: { user: AppUser | null, isOpen: boolean, onClose: () => void }) {
+    const { toast } = useToast();
+    const { giveBonus } = useAuth();
+
+    const form = useForm<BonusForm>({
+        resolver: zodResolver(bonusFormSchema),
+        defaultValues: { amount: 100, reason: '' },
+    });
+
+    const onSubmit = async (data: BonusForm) => {
+        if (!user) return;
+        try {
+            await giveBonus(user.uid, data.amount, data.reason);
+            toast({
+                title: "Bonus Sent!",
+                description: `${user.displayName} received ${data.amount} coins.`
+            });
+            form.reset();
+            onClose();
+        } catch (error: any) {
+            toast({
+                variant: 'destructive',
+                title: 'Failed to Send Bonus',
+                description: error.message
+            });
+        }
+    };
+    
+    if (!user) return null;
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Give Bonus to {user.displayName}</DialogTitle>
+                    <DialogDescription>
+                        This will add coins directly to the user's balance and create a transaction record.
+                    </DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                        <FormField
+                            control={form.control}
+                            name="amount"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Coin Amount</FormLabel>
+                                    <FormControl>
+                                        <Input type="number" placeholder="e.g., 500" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                         <FormField
+                            control={form.control}
+                            name="reason"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Reason</FormLabel>
+                                    <FormControl>
+                                        <Textarea placeholder="e.g., Contest winner" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <DialogFooter>
+                            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+                            <Button type="submit" disabled={form.formState.isSubmitting}>
+                                {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Send Bonus
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
+    )
+}
 
 function WalletSettings() {
     const { toast } = useToast();
@@ -71,7 +162,6 @@ function WalletSettings() {
                 const data = docSnap.data() as WalletSettingsForm;
                 form.reset({
                     coinToPkrRate: data.coinToPkrRate,
-                    // Ensure arrays are not undefined
                     ucPackages: data.ucPackages || [],
                     diamondPackages: data.diamondPackages || [],
                 });
@@ -242,9 +332,109 @@ function WalletSettings() {
     );
 }
 
+function TopEarnersCard() {
+    const [topEarners, setTopEarners] = useState<AppUser[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const q = query(collection(db, 'users'), orderBy('coins', 'desc'), limit(5));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const usersData: AppUser[] = [];
+            snapshot.forEach(doc => usersData.push({ ...doc.data(), uid: doc.id } as AppUser));
+            setTopEarners(usersData);
+            setLoading(false);
+        }, () => setLoading(false));
+        return () => unsubscribe();
+    }, []);
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Award className="text-yellow-500" /> Top Earners</CardTitle>
+            </CardHeader>
+            <CardContent>
+                {loading ? (
+                    <div className="flex justify-center items-center h-24"><Loader2 className="h-6 w-6 animate-spin" /></div>
+                ) : (
+                    <ul className="space-y-3">
+                        {topEarners.map((user, index) => (
+                            <li key={user.uid} className="flex items-center justify-between gap-4">
+                               <div className="flex items-center gap-3">
+                                    <span className="font-bold text-lg text-muted-foreground">{index + 1}</span>
+                                    <Avatar className="h-8 w-8">
+                                        <AvatarImage src={`https://avatar.vercel.sh/${user.email}.png`} />
+                                        <AvatarFallback>{user.displayName?.charAt(0) ?? 'U'}</AvatarFallback>
+                                    </Avatar>
+                                    <span className="font-medium truncate">{user.displayName}</span>
+                               </div>
+                               <Badge variant="secondary">{user.coins.toLocaleString()} Coins</Badge>
+                            </li>
+                        ))}
+                    </ul>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
+function TopReferrersCard({ allUsers, loading: loadingUsers }: { allUsers: AppUser[], loading: boolean }) {
+    const [topReferrers, setTopReferrers] = useState<(AppUser & { referralCount: number })[]>([]);
+
+    useEffect(() => {
+        if (!loadingUsers && allUsers.length > 0) {
+            const counts = allUsers.reduce((acc, user) => {
+                if (user.referredBy) {
+                    acc[user.referredBy] = (acc[user.referredBy] || 0) + 1;
+                }
+                return acc;
+            }, {} as Record<string, number>);
+
+            const sorted = Object.entries(counts)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 5)
+                .map(([uid, count]) => {
+                    const user = allUsers.find(u => u.uid === uid);
+                    return { ...user, uid, referralCount: count } as AppUser & { referralCount: number };
+                }).filter(u => u.displayName); 
+            setTopReferrers(sorted);
+        }
+    }, [allUsers, loadingUsers]);
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2"><UsersIcon className="text-blue-500" /> Top Referrers</CardTitle>
+            </CardHeader>
+            <CardContent>
+                {loadingUsers ? (
+                     <div className="flex justify-center items-center h-24"><Loader2 className="h-6 w-6 animate-spin" /></div>
+                ) : (
+                    <ul className="space-y-3">
+                        {topReferrers.map((user, index) => (
+                            <li key={user.uid} className="flex items-center justify-between gap-4">
+                                <div className="flex items-center gap-3">
+                                    <span className="font-bold text-lg text-muted-foreground">{index + 1}</span>
+                                    <Avatar className="h-8 w-8">
+                                        <AvatarImage src={`https://avatar.vercel.sh/${user.email}.png`} />
+                                        <AvatarFallback>{user.displayName?.charAt(0) ?? 'U'}</AvatarFallback>
+                                    </Avatar>
+                                    <span className="font-medium truncate">{user.displayName}</span>
+                                </div>
+                                <Badge variant="secondary">{user.referralCount} Referrals</Badge>
+                            </li>
+                        ))}
+                         {topReferrers.length === 0 && <p className="text-sm text-center text-muted-foreground">No referrals recorded yet.</p>}
+                    </ul>
+                )}
+            </CardContent>
+        </Card>
+    );
+}
+
 export default function AdminPage() {
     const [users, setUsers] = useState<AppUser[]>([]);
     const [loading, setLoading] = useState(true);
+    const [bonusUser, setBonusUser] = useState<AppUser | null>(null);
 
     useEffect(() => {
         const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
@@ -274,7 +464,14 @@ export default function AdminPage() {
                 <h1 className="text-3xl font-bold">Admin Panel</h1>
                 <p className="text-muted-foreground">Manage users and application data.</p>
             </div>
+            
+            <div className="grid md:grid-cols-2 gap-6">
+                <TopEarnersCard />
+                <TopReferrersCard allUsers={users} loading={loading} />
+            </div>
+
             <WalletSettings />
+            
             <Card>
                 <CardHeader>
                     <CardTitle>Users</CardTitle>
@@ -287,13 +484,14 @@ export default function AdminPage() {
                                 <TableHead>User</TableHead>
                                 <TableHead>Coins</TableHead>
                                 <TableHead>Role</TableHead>
-                                <TableHead className="text-right">Joined</TableHead>
+                                <TableHead>Joined</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {loading ? (
                                 <TableRow>
-                                    <TableCell colSpan={4} className="h-24 text-center">
+                                    <TableCell colSpan={5} className="h-24 text-center">
                                         <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
                                     </TableCell>
                                 </TableRow>
@@ -319,8 +517,14 @@ export default function AdminPage() {
                                             <Badge variant="secondary">User</Badge>
                                         )}
                                     </TableCell>
-                                    <TableCell className="text-right text-muted-foreground">
+                                    <TableCell className="text-muted-foreground">
                                         {user.createdAt ? formatDistanceToNow(new Date(user.createdAt.seconds * 1000), { addSuffix: true }) : 'N/A'}
+                                    </TableCell>
+                                    <TableCell className="text-right">
+                                        <Button variant="ghost" size="sm" onClick={() => setBonusUser(user)}>
+                                            <Gift className="mr-2 h-4 w-4" />
+                                            Bonus
+                                        </Button>
                                     </TableCell>
                                 </TableRow>
                             ))}
@@ -328,6 +532,8 @@ export default function AdminPage() {
                     </Table>
                 </CardContent>
             </Card>
+            <BonusDialog user={bonusUser} isOpen={!!bonusUser} onClose={() => setBonusUser(null)} />
         </div>
     );
 }
+

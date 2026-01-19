@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -110,6 +111,15 @@ function WalletActions() {
     }
 
     const handlePurchase = async (pkg: Package, type: 'UC' | 'Diamond', index: number) => {
+        if (!user || (user.pkrBalance < pkg.price)) {
+            toast({
+                variant: "destructive",
+                title: "Insufficient Balance",
+                description: `You need ${pkg.price} PKR to purchase this, but you only have ${user.pkrBalance} PKR.`,
+            });
+            return;
+        }
+
         const purchaseKey = `${type}-${index}`;
         setIsPurchasing(purchaseKey);
         try {
@@ -199,11 +209,10 @@ function WalletActions() {
                                         <CardFooter>
                                             <Button 
                                                 className="w-full"
-                                                disabled={(user?.pkrBalance ?? 0) < pkg.price || isPurchasing !== null}
+                                                disabled={isPurchasing !== null}
                                                 onClick={() => handlePurchase(pkg, 'UC', index)}
                                             >
-                                                {isPurchasing === `UC-${index}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                                Purchase
+                                                {isPurchasing === `UC-${index}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Purchase"}
                                             </Button>
                                         </CardFooter>
                                     </Card>
@@ -226,11 +235,10 @@ function WalletActions() {
                                         <CardFooter>
                                             <Button 
                                                 className="w-full"
-                                                disabled={(user?.pkrBalance ?? 0) < pkg.price || isPurchasing !== null}
+                                                disabled={isPurchasing !== null}
                                                 onClick={() => handlePurchase(pkg, 'Diamond', index)}
                                             >
-                                                {isPurchasing === `Diamond-${index}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                                                Purchase
+                                                {isPurchasing === `Diamond-${index}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Purchase"}
                                             </Button>
                                         </CardFooter>
                                     </Card>
