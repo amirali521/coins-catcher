@@ -31,6 +31,12 @@ interface User {
   dailyStreakCount: number;
   lastDailyClaim: { seconds: number; nanoseconds: number; } | null;
   lastFaucetClaimTimestamp?: { seconds: number; nanoseconds: number; } | null;
+  pubgId?: string;
+  pubgName?: string;
+  freefireId?: string;
+  freefireName?: string;
+  jazzcashNumber?: string;
+  easypaisaNumber?: string;
 }
 
 interface AuthContextType {
@@ -48,6 +54,7 @@ interface AuthContextType {
   claimDailyReward: () => Promise<{ amount: number; newStreak: number }>;
   withdrawPkr: (pkrAmount: number, description: string) => Promise<void>;
   giveBonus: (userId: string, amount: number, reason: string) => Promise<void>;
+  updateWithdrawalDetails: (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'easypaisaNumber'>>) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -111,6 +118,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               dailyStreakCount: userData.dailyStreakCount || 0,
               lastDailyClaim: userData.lastDailyClaim || null,
               lastFaucetClaimTimestamp: userData.lastFaucetClaimTimestamp || null,
+              pubgId: userData.pubgId,
+              pubgName: userData.pubgName,
+              freefireId: userData.freefireId,
+              freefireName: userData.freefireName,
+              jazzcashNumber: userData.jazzcashNumber,
+              easypaisaNumber: userData.easypaisaNumber,
             });
              setLoading(false);
           } else if (!docSnap.exists()){
@@ -351,7 +364,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await addTransaction(userId, 'bonus', amount, `Admin Bonus: ${reason}`);
   };
 
-  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus };
+  const updateWithdrawalDetails = async (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'easypaisaNumber'>>) => {
+    if (!user) throw new Error("User not authenticated.");
+    const userRef = doc(db, 'users', user.uid);
+    await updateDoc(userRef, details);
+  };
+
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails };
 
   return (
     <AuthContext.Provider value={value}>

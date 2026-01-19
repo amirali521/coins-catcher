@@ -6,13 +6,182 @@ import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
-import { LogOut } from "lucide-react";
+import { LogOut, Loader2, Save } from "lucide-react";
+import React from "react";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useToast } from "@/hooks/use-toast";
+
+const withdrawalSchema = z.object({
+  pubgId: z.string().optional(),
+  pubgName: z.string().optional(),
+  freefireId: z.string().optional(),
+  freefireName: z.string().optional(),
+  jazzcashNumber: z.string().optional(),
+  easypaisaNumber: z.string().optional(),
+});
+
+type WithdrawalFormValues = z.infer<typeof withdrawalSchema>;
+
+function WithdrawalSettings() {
+  const { user, updateWithdrawalDetails } = useAuth();
+  const { toast } = useToast();
+
+  const form = useForm<WithdrawalFormValues>({
+    resolver: zodResolver(withdrawalSchema),
+    defaultValues: {
+      pubgId: "",
+      pubgName: "",
+      freefireId: "",
+      freefireName: "",
+      jazzcashNumber: "",
+      easypaisaNumber: "",
+    },
+  });
+
+  React.useEffect(() => {
+    if (user) {
+      form.reset({
+        pubgId: user.pubgId || "",
+        pubgName: user.pubgName || "",
+        freefireId: user.freefireId || "",
+        freefireName: user.freefireName || "",
+        jazzcashNumber: user.jazzcashNumber || "",
+        easypaisaNumber: user.easypaisaNumber || "",
+      });
+    }
+  }, [user, form]);
+
+  const onSubmit = async (data: WithdrawalFormValues) => {
+    try {
+      await updateWithdrawalDetails(data);
+      toast({
+        title: "Settings Saved",
+        description: "Your withdrawal information has been updated.",
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error.message,
+      });
+    }
+  };
+  
+  return (
+    <Card>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)}>
+          <CardHeader>
+            <CardTitle>Withdrawal Information</CardTitle>
+            <CardDescription>
+              Provide your details to receive withdrawals. This information is kept private and secure.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-8">
+            <div className="space-y-4 rounded-lg border p-4">
+              <h3 className="font-semibold">Game IDs</h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="pubgId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>PUBG Mobile ID</FormLabel>
+                      <FormControl><Input placeholder="Your PUBG ID" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="pubgName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>PUBG Mobile Name</FormLabel>
+                      <FormControl><Input placeholder="Your PUBG Name" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="freefireId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>FreeFire ID</FormLabel>
+                      <FormControl><Input placeholder="Your FreeFire ID" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <FormField
+                  control={form.control}
+                  name="freefireName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>FreeFire Name</FormLabel>
+                      <FormControl><Input placeholder="Your FreeFire Name" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-4 rounded-lg border p-4">
+              <h3 className="font-semibold">Payment Details</h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="jazzcashNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Jazzcash Number</FormLabel>
+                      <FormControl><Input placeholder="03xxxxxxxxx" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="easypaisaNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Easypaisa Number</FormLabel>
+                      <FormControl><Input placeholder="03xxxxxxxxx" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+          </CardContent>
+          <CardFooter>
+            <Button type="submit" disabled={form.formState.isSubmitting}>
+              {form.formState.isSubmitting ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Save className="mr-2 h-4 w-4" />
+              )}
+              Save Withdrawal Info
+            </Button>
+          </CardFooter>
+        </form>
+      </Form>
+    </Card>
+  );
+}
+
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
@@ -40,6 +209,8 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+      
+      <WithdrawalSettings />
 
       <Card>
         <CardHeader>
