@@ -1,10 +1,10 @@
-
 "use client";
 
 import {
   Card,
   CardContent,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -16,15 +16,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
 import { Coins, ArrowUpCircle, ArrowDownCircle, Loader2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, orderBy, query } from "firebase/firestore";
+import { collection, onSnapshot, orderBy, query, doc, getDoc } from "firebase/firestore";
 import { db } from "@/firebase/init";
 import { formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 
 interface Transaction {
   id: string;
@@ -32,6 +38,210 @@ interface Transaction {
   amount: number;
   description: string;
   date: { seconds: number; nanoseconds: number; };
+}
+
+interface Package {
+    amount: number;
+    price: number;
+}
+interface WalletSettings {
+    coinToPkrRate: number;
+    ucPackages: Package[];
+    diamondPackages: Package[];
+}
+
+const withdrawalFormSchema = z.object({
+  amount: z.coerce.number().min(100, { message: "Minimum withdrawal is 100 PKR." }),
+});
+
+
+function WalletActions() {
+    const { user, withdrawPkr } = useAuth();
+    const { toast } = useToast();
+    const [settings, setSettings] = useState<WalletSettings | null>(null);
+    const [loadingSettings, setLoadingSettings] = useState(true);
+    const [isPurchasing, setIsPurchasing] = useState<string | null>(null); // Use a unique key like `type-index`
+
+    const formSchema = withdrawalFormSchema.refine(data => data.amount <= (user?.pkrBalance ?? 0), {
+        message: "Amount exceeds your PKR balance.",
+        path: ["amount"],
+    });
+
+    const form = useForm<z.infer<typeof formSchema>>({
+        resolver: zodResolver(formSchema),
+        defaultValues: {
+            amount: 100,
+        },
+    });
+
+    useEffect(() => {
+        const fetchSettings = async () => {
+            try {
+                const settingsRef = doc(db, 'config', 'wallet');
+                const docSnap = await getDoc(settingsRef);
+                if (docSnap.exists()) {
+                    setSettings(docSnap.data() as WalletSettings);
+                }
+            } catch (error) {
+                console.error("Failed to fetch wallet settings:", error);
+                toast({ variant: 'destructive', title: "Error", description: "Could not load purchase options." });
+            } finally {
+                setLoadingSettings(false);
+            }
+        };
+        fetchSettings();
+    }, [toast]);
+
+    async function onWithdrawSubmit(data: z.infer<typeof formSchema>) {
+        try {
+            await withdrawPkr(data.amount, `${data.amount} PKR Withdrawal`);
+            toast({
+                title: "Withdrawal Successful",
+                description: `Your request for ${data.amount} PKR has been processed.`,
+            });
+            form.reset();
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Withdrawal Failed",
+                description: error.message,
+            });
+        }
+    }
+
+    const handlePurchase = async (pkg: Package, type: 'UC' | 'Diamond', index: number) => {
+        const purchaseKey = `${type}-${index}`;
+        setIsPurchasing(purchaseKey);
+        try {
+            await withdrawPkr(pkg.price, `Purchase of ${pkg.amount} ${type}`);
+             toast({
+                title: "Purchase Successful!",
+                description: `You purchased ${pkg.amount} ${type} for ${pkg.price} PKR.`,
+            });
+        } catch (error: any) {
+             toast({
+                variant: 'destructive',
+                title: "Purchase Failed",
+                description: error.message,
+            });
+        } finally {
+            setIsPurchasing(null);
+        }
+    };
+
+    if (loadingSettings) {
+        return (
+             <Card>
+                <CardHeader>
+                    <CardTitle>Withdrawals & Purchases</CardTitle>
+                    <CardDescription>Loading options...</CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center justify-center h-48">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </CardContent>
+            </Card>
+        );
+    }
+    
+    return (
+         <Card>
+            <CardHeader>
+                <CardTitle>Withdrawals & Purchases</CardTitle>
+                <CardDescription>Use your PKR balance to withdraw cash or purchase in-game currency.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Tabs defaultValue="withdraw" className="w-full">
+                    <TabsList className="grid w-full grid-cols-3">
+                        <TabsTrigger value="withdraw">Withdraw PKR</TabsTrigger>
+                        <TabsTrigger value="uc">PUBG UC</TabsTrigger>
+                        <TabsTrigger value="diamonds">FreeFire Diamonds</TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="withdraw" className="pt-6">
+                        <Form {...form}>
+                            <form onSubmit={form.handleSubmit(onWithdrawSubmit)} className="space-y-6 max-w-md mx-auto">
+                                <h3 className="font-semibold text-lg">Withdraw Funds</h3>
+                                <p className="text-sm text-muted-foreground">
+                                    Withdrawals to Easypaisa/Jazzcash are simulated. The amount will be deducted from your balance.
+                                </p>
+                                 <FormField
+                                    control={form.control}
+                                    name="amount"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Amount (PKR)</FormLabel>
+                                            <FormControl>
+                                                <Input type="number" placeholder="100" {...field} />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <Button type="submit" disabled={form.formState.isSubmitting}>
+                                    {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Withdraw
+                                </Button>
+                            </form>
+                        </Form>
+                    </TabsContent>
+
+                    <TabsContent value="uc" className="pt-6">
+                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {settings?.ucPackages && settings.ucPackages.length > 0 ? (
+                                settings.ucPackages.map((pkg, index) => (
+                                    <Card key={`uc-${index}`}>
+                                        <CardHeader className="text-center">
+                                            <CardTitle>{pkg.amount} UC</CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="text-center">
+                                            <p className="text-2xl font-bold text-primary">{pkg.price} PKR</p>
+                                        </CardContent>
+                                        <CardFooter>
+                                            <Button 
+                                                className="w-full"
+                                                disabled={(user?.pkrBalance ?? 0) < pkg.price || isPurchasing !== null}
+                                                onClick={() => handlePurchase(pkg, 'UC', index)}
+                                            >
+                                                {isPurchasing === `UC-${index}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                                Purchase
+                                            </Button>
+                                        </CardFooter>
+                                    </Card>
+                                ))
+                            ) : (<p className="col-span-full text-center text-muted-foreground pt-4">No UC packages available.</p>)}
+                         </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="diamonds" className="pt-6">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                            {settings?.diamondPackages && settings.diamondPackages.length > 0 ? (
+                                settings.diamondPackages.map((pkg, index) => (
+                                    <Card key={`diamond-${index}`}>
+                                        <CardHeader className="text-center">
+                                            <CardTitle>{pkg.amount} Diamonds</CardTitle>
+                                        </CardHeader>
+                                        <CardContent className="text-center">
+                                            <p className="text-2xl font-bold text-primary">{pkg.price} PKR</p>
+                                        </CardContent>
+                                        <CardFooter>
+                                            <Button 
+                                                className="w-full"
+                                                disabled={(user?.pkrBalance ?? 0) < pkg.price || isPurchasing !== null}
+                                                onClick={() => handlePurchase(pkg, 'Diamond', index)}
+                                            >
+                                                {isPurchasing === `Diamond-${index}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                                Purchase
+                                            </Button>
+                                        </CardFooter>
+                                    </Card>
+                                ))
+                            ): (<p className="col-span-full text-center text-muted-foreground pt-4">No Diamond packages available.</p>)}
+                        </div>
+                    </TabsContent>
+                </Tabs>
+            </CardContent>
+        </Card>
+    );
 }
 
 export default function WalletPage() {
@@ -103,16 +313,7 @@ export default function WalletPage() {
         </Card>
       </div>
       
-      <Card>
-        <CardHeader>
-            <CardTitle>Withdrawals & Purchases</CardTitle>
-            <CardDescription>Convert your coins to PKR and then purchase packages or withdraw.</CardDescription>
-        </CardHeader>
-        <CardContent className="text-center text-muted-foreground">
-            <p>Coin conversion and purchasing functionality will be added soon.</p>
-            <p>Please wait for the next update.</p>
-        </CardContent>
-      </Card>
+      <WalletActions />
 
 
       <Card>

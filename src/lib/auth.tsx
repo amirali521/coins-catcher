@@ -46,7 +46,7 @@ interface AuthContextType {
   claimHourlyReward: (amount: number) => Promise<void>;
   claimFaucetReward: (amount: number) => Promise<void>;
   claimDailyReward: () => Promise<{ amount: number; newStreak: number }>;
-  withdrawCoins: (amount: number, description: string) => Promise<void>;
+  withdrawPkr: (pkrAmount: number, description: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -302,15 +302,26 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { amount: rewardAmount, newStreak: currentStreak };
   };
 
-  const withdrawCoins = async (amount: number, description: string) => {
+  const withdrawPkr = async (pkrAmount: number, description: string) => {
     if (!user) throw new Error("User not authenticated");
-    if (user.coins < amount) throw new Error("Insufficient coins");
+    if (user.pkrBalance < pkrAmount) throw new Error("Insufficient PKR balance");
+    if (coinToPkrRate === null || coinToPkrRate <= 0) {
+      throw new Error("Cannot process transaction: conversion rate is invalid.");
+    }
+
+    // Use ceil to make sure we deduct enough coins, even for fractions of a pkr.
+    const coinsToDeduct = Math.ceil((pkrAmount / coinToPkrRate) * 100000);
+    
+    // Final check against actual coin balance to prevent floating point inaccuracies.
+    if (user.coins < coinsToDeduct) {
+        throw new Error("Insufficient coin balance for this transaction.");
+    }
     
     const userRef = doc(db, 'users', user.uid);
     await updateDoc(userRef, {
-      coins: increment(-amount),
+      coins: increment(-coinsToDeduct),
     });
-    await addTransaction(user.uid, 'withdraw', -amount, description);
+    await addTransaction(user.uid, 'withdraw', -coinsToDeduct, description);
   };
   
   const sendVerificationEmail = async () => {
@@ -325,7 +336,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await firebaseSendPasswordResetEmail(auth, email);
   };
 
-  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawCoins };
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr };
 
   return (
     <AuthContext.Provider value={value}>
