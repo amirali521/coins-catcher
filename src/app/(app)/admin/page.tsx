@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc, getDocs } from 'firebase/firestore';
+import { collection, query, orderBy, doc, getDoc, setDoc, getDocs, limit } from 'firebase/firestore';
 import { db } from '@/firebase/init';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -341,14 +341,21 @@ function TopEarnersCard() {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const q = query(collection(db, 'users'), orderBy('coins', 'desc'), limit(5));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const usersData: AppUser[] = [];
-            snapshot.forEach(doc => usersData.push({ ...doc.data(), uid: doc.id } as AppUser));
-            setTopEarners(usersData);
-            setLoading(false);
-        }, () => setLoading(false));
-        return () => unsubscribe();
+        const fetchTopEarners = async () => {
+            setLoading(true);
+            try {
+                const q = query(collection(db, 'users'), orderBy('coins', 'desc'), limit(5));
+                const snapshot = await getDocs(q);
+                const usersData: AppUser[] = [];
+                snapshot.forEach(doc => usersData.push({ ...doc.data(), uid: doc.id } as AppUser));
+                setTopEarners(usersData);
+            } catch (error) {
+                console.error("Error fetching top earners:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchTopEarners();
     }, []);
 
     return (
@@ -589,5 +596,7 @@ export default function AdminPage() {
         </div>
     );
 }
+
+    
 
     

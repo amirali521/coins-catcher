@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -14,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Copy, Gift, UserPlus, Loader2, Link as LinkIcon } from "lucide-react";
-import { collection, query, where, onSnapshot } from "firebase/firestore";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { db } from "@/firebase/init";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -36,40 +37,46 @@ export default function ReferralsPage() {
   const referralLink = `https://coincatcher.app/signup?ref=${user?.referralCode}`;
 
   useEffect(() => {
-    if (!user?.uid) return;
+    if (!user?.uid) {
+        setLoading(false);
+        return;
+    }
 
-    const q = query(
-        collection(db, "users"), 
-        where("referredBy", "==", user.uid)
-    );
-    
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-        const users: ReferredUser[] = [];
-        querySnapshot.forEach((doc) => {
-            const data = doc.data();
-            users.push({
-                uid: doc.id,
-                displayName: data.displayName,
-                email: data.email,
-                createdAt: data.createdAt || null,
+    const fetchReferredUsers = async () => {
+        setLoading(true);
+        try {
+            const q = query(
+                collection(db, "users"), 
+                where("referredBy", "==", user.uid)
+            );
+            
+            const querySnapshot = await getDocs(q);
+            const users: ReferredUser[] = [];
+            querySnapshot.forEach((doc) => {
+                const data = doc.data();
+                users.push({
+                    uid: doc.id,
+                    displayName: data.displayName,
+                    email: data.email,
+                    createdAt: data.createdAt || null,
+                });
             });
-        });
-        
-        users.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+            
+            users.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+            setReferredUsers(users);
+        } catch (error) {
+            console.error("Error fetching referred users:", error);
+            toast({
+                variant: "destructive",
+                title: "Error",
+                description: "Could not fetch your referrals.",
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
 
-        setReferredUsers(users);
-        setLoading(false);
-    }, (error) => {
-        console.error("Error fetching referred users:", error);
-        toast({
-            variant: "destructive",
-            title: "Error",
-            description: "Could not fetch your referrals.",
-        });
-        setLoading(false);
-    });
-
-    return () => unsubscribe();
+    fetchReferredUsers();
   }, [user, toast]);
 
   const handleCopy = () => {
@@ -189,3 +196,5 @@ export default function ReferralsPage() {
     </div>
   );
 }
+
+    
