@@ -24,6 +24,7 @@ interface User {
   displayName: string | null;
   emailVerified: boolean;
   coins: number;
+  pkrBalance: number;
   referralCode: string;
   admin: boolean;
   lastClaimTimestamp?: { seconds: number; nanoseconds: number; } | null; // Hourly
@@ -80,6 +81,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               displayName: fbUser.displayName,
               emailVerified: fbUser.emailVerified,
               coins: userData.coins,
+              pkrBalance: userData.pkrBalance || 0,
               referralCode: userData.referralCode,
               admin: userData.admin || false,
               lastClaimTimestamp: userData.lastClaimTimestamp || null,
@@ -148,6 +150,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         email: fbUser.email,
         displayName: fbUser.displayName,
         coins: initialCoins,
+        pkrBalance: 0,
         referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
         referredBy: referrerId,
         admin: false,
@@ -192,6 +195,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       email: fbUser.email,
       displayName: name,
       coins: initialCoins,
+      pkrBalance: 0,
       referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
       referredBy: referrerId,
       admin: false,
