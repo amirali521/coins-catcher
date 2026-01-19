@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -38,6 +37,7 @@ export default function DashboardPage() {
   const [isTapping, setIsTapping] = useState(false);
   const [tapTapAdClicked, setTapTapAdClicked] = useState(false);
   const tapTimestamps = useRef<number[]>([]);
+  const [isPenalized, setIsPenalized] = useState(false);
 
 
   const calculateCooldowns = useCallback(() => {
@@ -191,12 +191,23 @@ export default function DashboardPage() {
   }
 
   const handleTap = () => {
+    if (isPenalized) {
+      return;
+    }
+
     const now = Date.now();
     // Remove timestamps older than 1 second
     tapTimestamps.current = tapTimestamps.current.filter(ts => now - ts < 1000);
 
     // Check if the tap limit is exceeded
     if (tapTimestamps.current.length >= 8) {
+      toast({
+        variant: "destructive",
+        title: "Auto-clicker detected!",
+        description: "Tapping disabled for 3 seconds.",
+      });
+      setIsPenalized(true);
+      setTimeout(() => setIsPenalized(false), 3000);
       return; // Do nothing, tap is ignored
     }
 
@@ -431,13 +442,16 @@ export default function DashboardPage() {
                      <Button
                         onClick={handleTap}
                         variant="ghost"
+                        disabled={isPenalized}
                         className={cn(
                             "rounded-full h-48 w-48 relative transition-transform duration-100 ease-in-out",
-                            isTapping && 'scale-95'
+                            isTapping && !isPenalized && "scale-95"
                         )}
                     >
                         <Gem className="h-40 w-40 text-primary drop-shadow-[0_0_15px_hsl(var(--primary)/0.5)]" />
-                        <span className="absolute text-3xl font-bold text-primary-foreground drop-shadow-lg">TAP</span>
+                        <span className="absolute text-3xl font-bold text-primary-foreground drop-shadow-lg">
+                           {isPenalized ? 'LOCKED' : 'TAP'}
+                        </span>
                     </Button>
                 </CardContent>
                 <CardFooter className="flex-col gap-4 w-full max-w-sm border-t pt-6">
@@ -469,5 +483,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
