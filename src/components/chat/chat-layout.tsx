@@ -208,15 +208,27 @@ function ConversationList({ onSelectChat, activeChatId }: { onSelectChat: (frien
 
     useEffect(() => {
         if (!user) return;
+        // The orderBy was causing a composite index requirement.
+        // We'll remove it and sort on the client.
         const chatsQuery = query(
             collection(db, 'chats'), 
-            where('participants', 'array-contains', user.uid),
-            orderBy('lastMessage.timestamp', 'desc')
+            where('participants', 'array-contains', user.uid)
         );
 
         const unsubscribe = onSnapshot(chatsQuery, (snapshot) => {
             const chatData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
+            
+            // Sort chats by the timestamp of the last message, newest first.
+            chatData.sort((a, b) => {
+                const timeA = a.lastMessage?.timestamp?.seconds ?? 0;
+                const timeB = b.lastMessage?.timestamp?.seconds ?? 0;
+                return timeB - timeA;
+            });
+
             setChats(chatData);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching recent chats:", error);
             setLoading(false);
         });
 
