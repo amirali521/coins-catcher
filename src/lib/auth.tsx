@@ -468,11 +468,30 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       if (amount <= 0) {
           throw new Error("Bonus amount must be positive.");
       }
-      const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-          coins: increment(amount)
-      });
-      await addTransaction(userId, 'bonus', amount, `Admin Bonus: ${reason}`);
+      try {
+          await runTransaction(db, async (t) => {
+              const userRef = doc(db, 'users', userId);
+              const userDoc = await t.get(userRef);
+              if (!userDoc.exists()) {
+                  throw new Error("User not found.");
+              }
+              
+              // Perform the coin update
+              t.update(userRef, { coins: increment(amount) });
+
+              // Create the transaction log
+              const transactionRef = doc(collection(db, 'users', userId, 'transactions'));
+              t.set(transactionRef, {
+                  type: 'bonus',
+                  amount,
+                  description: `Admin Bonus: ${reason}`,
+                  date: new Date(), // Using new Date() because serverTimestamp is not allowed in transactions
+              });
+          });
+      } catch (e: any) {
+          // Re-throw for the UI to handle
+          throw new Error(e.message || "Bonus transaction failed.");
+      }
   };
 
   const updateWithdrawalDetails = async (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'easypaisaNumber'>>) => {
@@ -497,5 +516,7 @@ export const useAuth = () => {
   }
   return context;
 };
+
+    
 
     
