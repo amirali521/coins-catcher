@@ -12,6 +12,7 @@ import {
   sendEmailVerification,
   sendPasswordResetEmail as firebaseSendPasswordResetEmail,
   User as FirebaseUser,
+  deleteUser,
 } from 'firebase/auth';
 import { auth, db } from '@/firebase/init';
 import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection, addDoc, runTransaction } from 'firebase/firestore';
@@ -27,6 +28,7 @@ interface User {
   pkrBalance: number;
   referralCode: string;
   admin: boolean;
+  blocked?: boolean;
   lastClaimTimestamp?: { seconds: number; nanoseconds: number; } | null; // Hourly
   dailyStreakCount: number;
   lastDailyClaim: { seconds: number; nanoseconds: number; } | null;
@@ -146,6 +148,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               jazzcashName: userData.jazzcashName,
               easypaisaNumber: userData.easypaisaNumber,
               easypaisaName: userData.easypaisaName,
+              blocked: userData.blocked,
             });
              setLoading(false);
           } else if (!docSnap.exists()){
@@ -219,7 +222,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 const referrerDoc = querySnapshot.docs[0];
                 referrerId = referrerDoc.id;
                 await updateDoc(referrerDoc.ref, { coins: increment(300) });
-                await addTransaction(referrerId, 'referral-bonus', 300, `Referral bonus from ${fbUser.displayName}`);
+                await addTransaction(referrerId, 'referral-bonus', 300, `Referral bonus from ${fbUser.displayName || 'a new user'}`);
                 referred = true;
             }
         }
@@ -256,54 +259,69 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signup = useCallback(async (name: string, email: string, password?: string, referralCode?: string | null) => {
     if (!password) throw new Error("Password is required for email/password signup.");
     
-    const usersRef = collection(db, 'users');
-    const q = query(usersRef, where('displayName', '==', name));
-    const nameQuerySnapshot = await getDocs(q);
-    if (!nameQuerySnapshot.empty) {
-      throw new Error(`Username "${name}" is already taken. Please choose another one.`);
-    }
-
-    let referred = false;
-    let referrerId: string | null = null;
-    const initialCoins = 200;
-
-    if (referralCode) {
-        const referralQuery = query(collection(db, 'users'), where('referralCode', '==', referralCode), limit(1));
-        const querySnapshot = await getDocs(referralQuery);
-        if (!querySnapshot.empty) {
-            const referrerDoc = querySnapshot.docs[0];
-            referrerId = referrerDoc.id;
-            await updateDoc(referrerDoc.ref, { coins: increment(300) });
-            await addTransaction(referrerId, 'referral-bonus', 300, `Referral bonus from ${name}`);
-            referred = true;
-        }
-    }
-
+    // Step 1: Create the user in Firebase Auth.
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const fbUser = userCredential.user;
 
-    await updateProfile(fbUser, { displayName: name });
-    
-    const userDocRef = doc(db, 'users', fbUser.uid);
-    await setDoc(userDocRef, {
-      uid: fbUser.uid,
-      email: fbUser.email,
-      displayName: name,
-      coins: initialCoins,
-      referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
-      referredBy: referrerId,
-      admin: false,
-      blocked: false,
-      createdAt: serverTimestamp(),
-      lastClaimTimestamp: null,
-      dailyStreakCount: 0,
-      lastDailyClaim: null,
-      lastFaucetClaimTimestamp: null,
-    });
-    await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
+    try {
+        // Step 2: Now that user is authenticated, check for unique display name.
+        const usersRef = collection(db, 'users');
+        const q = query(usersRef, where('displayName', '==', name));
+        const nameQuerySnapshot = await getDocs(q);
+        if (!nameQuerySnapshot.empty) {
+          throw new Error(`Username "${name}" is already taken. Please choose another one.`);
+        }
 
-    await sendEmailVerification(fbUser);
-    return { referred };
+        // Step 3: Handle referral logic.
+        let referred = false;
+        let referrerId: string | null = null;
+        const initialCoins = 200;
+
+        if (referralCode) {
+            const referralQuery = query(collection(db, 'users'), where('referralCode', '==', referralCode), limit(1));
+            const querySnapshot = await getDocs(referralQuery);
+            if (!querySnapshot.empty) {
+                const referrerDoc = querySnapshot.docs[0];
+                referrerId = referrerDoc.id;
+
+                if (referrerId !== fbUser.uid) {
+                    await updateDoc(referrerDoc.ref, { coins: increment(300) });
+                    await addTransaction(referrerId, 'referral-bonus', 300, `Referral bonus from ${name}`);
+                    referred = true;
+                }
+            }
+        }
+
+        // Step 4: Update profile and create user document in Firestore.
+        await updateProfile(fbUser, { displayName: name });
+        
+        const userDocRef = doc(db, 'users', fbUser.uid);
+        await setDoc(userDocRef, {
+          uid: fbUser.uid,
+          email: fbUser.email,
+          displayName: name,
+          coins: initialCoins,
+          referralCode: `REF${fbUser.uid.substring(0, 6).toUpperCase()}`,
+          referredBy: referrerId,
+          admin: false,
+          blocked: false,
+          createdAt: serverTimestamp(),
+          lastClaimTimestamp: null,
+          dailyStreakCount: 0,
+          lastDailyClaim: null,
+          lastFaucetClaimTimestamp: null,
+        });
+        await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
+
+        // Step 5: Send verification email.
+        await sendEmailVerification(fbUser);
+        return { referred };
+    } catch(e) {
+        // If any of the DB operations or checks fail, we must delete the created user
+        // so they can try signing up again with the same email.
+        await deleteUser(fbUser);
+        throw e; // re-throw the original error to be displayed to the user
+    }
   }, []);
 
   const logout = useCallback(async () => {
@@ -348,6 +366,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const userRef = doc(db, 'users', user.uid);
     const lastClaimDate = user.lastDailyClaim ? new Date(user.lastDailyClaim.seconds * 1000) : null;
     
+    // This check is now purely for the client-side UI, the rules prevent double-claiming
     if (lastClaimDate && isToday(lastClaimDate)) {
         throw new Error("Daily reward already claimed for today.");
     }
