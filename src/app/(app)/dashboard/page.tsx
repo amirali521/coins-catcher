@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
@@ -37,6 +37,7 @@ export default function DashboardPage() {
   const [tapTapCoins, setTapTapCoins] = useState(0);
   const [isTapping, setIsTapping] = useState(false);
   const [tapTapAdClicked, setTapTapAdClicked] = useState(false);
+  const tapTimestamps = useRef<number[]>([]);
 
 
   const calculateCooldowns = useCallback(() => {
@@ -190,6 +191,19 @@ export default function DashboardPage() {
   }
 
   const handleTap = () => {
+    const now = Date.now();
+    // Remove timestamps older than 1 second
+    tapTimestamps.current = tapTimestamps.current.filter(ts => now - ts < 1000);
+
+    // Check if the tap limit is exceeded
+    if (tapTimestamps.current.length >= 8) {
+      return; // Do nothing, tap is ignored
+    }
+
+    // Add the new timestamp
+    tapTimestamps.current.push(now);
+
+    // Original tap logic
     setIsTapping(true);
     setTapTapCoins(c => c + 1);
     setTimeout(() => setIsTapping(false), 150);
