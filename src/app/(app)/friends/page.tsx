@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { db } from '@/firebase/init';
 import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs, serverTimestamp, orderBy } from 'firebase/firestore';
@@ -10,8 +9,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
-import { Loader2, UserPlus, Users, Check, X, Search } from 'lucide-react';
+import { Loader2, UserPlus, Users, Check, X, Search, MessageCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
+import { ChatDialog } from '@/components/chat/chat-dialog';
 
 // Raw user data from Firestore
 interface AppUser {
@@ -20,6 +20,7 @@ interface AppUser {
     email: string;
     coins: number;
     admin: boolean;
+    lastSeen: { seconds: number; nanoseconds: number; } | null;
 }
 
 // Friend request structure from Firestore
@@ -85,6 +86,7 @@ const unfriend = async (requestId: string) => {
 
 function MyFriendsTab({ friends, loading }: { friends: UserWithFriendship[], loading: boolean }) {
     const { toast } = useToast();
+    const [chattingWith, setChattingWith] = useState<UserWithFriendship | null>(null);
 
     const handleUnfriend = async (request: UserWithFriendship) => {
         if (!request.requestId) return;
@@ -96,43 +98,75 @@ function MyFriendsTab({ friends, loading }: { friends: UserWithFriendship[], loa
         }
     }
     
+    const sortedFriends = useMemo(() => {
+        const onlineFriends: UserWithFriendship[] = [];
+        const offlineFriends: UserWithFriendship[] = [];
+
+        friends.forEach(friend => {
+            const isOnline = friend.lastSeen && (new Date().getTime() - new Date(friend.lastSeen.seconds * 1000).getTime()) < 5 * 60 * 1000;
+            if (isOnline) {
+                onlineFriends.push(friend);
+            } else {
+                offlineFriends.push(friend);
+            }
+        });
+        
+        onlineFriends.sort((a, b) => a.displayName.localeCompare(b.displayName));
+        offlineFriends.sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+        return [...onlineFriends, ...offlineFriends];
+    }, [friends]);
+
     return (
-         <Card>
-            <CardHeader>
-                <CardTitle>My Friends ({friends.length})</CardTitle>
-                <CardDescription>Your connections on the platform.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                 {loading ? (
-                    <div className="flex justify-center items-center h-24"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-                ) : friends.length === 0 ? (
-                    <p className="text-muted-foreground text-center">You haven't added any friends yet.</p>
-                ) : (
-                    <ul className="space-y-3">
-                        {friends.map(friend => (
-                            <li key={friend.uid} className="flex items-center justify-between gap-4 p-2 rounded-lg hover:bg-muted/50">
-                               <div className="flex items-center gap-3">
-                                    <Avatar className="h-10 w-10">
-                                        <AvatarImage src={`https://avatar.vercel.sh/${friend.email}.png`} />
-                                        <AvatarFallback>{friend.displayName?.charAt(0) ?? 'U'}</AvatarFallback>
-                                    </Avatar>
-                                    <div>
-                                        <p className="font-medium">{friend.displayName}</p>
-                                        <p className="text-sm text-muted-foreground">{friend.email}</p>
-                                    </div>
-                               </div>
-                               <div className="flex items-center gap-2">
-                                   <Button variant="secondary" asChild>
-                                      <Link href={`/chat?friend=${friend.uid}`}>Chat</Link>
-                                   </Button>
-                                   <Button variant="ghost" size="sm" onClick={() => handleUnfriend(friend)}>Unfriend</Button>
-                               </div>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </CardContent>
-        </Card>
+        <>
+            <Card>
+                <CardHeader>
+                    <CardTitle>My Friends ({friends.length})</CardTitle>
+                    <CardDescription>Your connections on the platform. Sorted by online status.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {loading ? (
+                        <div className="flex justify-center items-center h-24"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+                    ) : sortedFriends.length === 0 ? (
+                        <p className="text-muted-foreground text-center">You haven't added any friends yet.</p>
+                    ) : (
+                        <ul className="space-y-3">
+                            {sortedFriends.map(friend => {
+                                const isOnline = friend.lastSeen && (new Date().getTime() - new Date(friend.lastSeen.seconds * 1000).getTime()) < 5 * 60 * 1000;
+                                return (
+                                <li key={friend.uid} className="flex items-center justify-between gap-4 p-2 rounded-lg hover:bg-muted/50">
+                                <div className="flex items-center gap-3">
+                                        <div className="relative">
+                                            <Avatar className="h-10 w-10">
+                                                <AvatarImage src={`https://avatar.vercel.sh/${friend.email}.png`} />
+                                                <AvatarFallback>{friend.displayName?.charAt(0) ?? 'U'}</AvatarFallback>
+                                            </Avatar>
+                                            {isOnline && <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-card" />}
+                                        </div>
+                                        <div>
+                                            <p className="font-medium">{friend.displayName}</p>
+                                            <p className="text-sm text-muted-foreground">{friend.email}</p>
+                                        </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Button variant="secondary" onClick={() => setChattingWith(friend)}>
+                                        <MessageCircle className="mr-2 h-4 w-4"/> Chat
+                                    </Button>
+                                    <Button variant="ghost" size="sm" onClick={() => handleUnfriend(friend)}>Unfriend</Button>
+                                </div>
+                                </li>
+                            )})}
+                        </ul>
+                    )}
+                </CardContent>
+            </Card>
+             {chattingWith && (
+                <ChatDialog 
+                    friend={chattingWith} 
+                    onClose={() => setChattingWith(null)} 
+                />
+            )}
+        </>
     );
 }
 

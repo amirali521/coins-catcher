@@ -32,6 +32,7 @@ interface User {
   dailyStreakCount: number;
   lastDailyClaim: { seconds: number; nanoseconds: number; } | null;
   lastFaucetClaimTimestamp?: { seconds: number; nanoseconds: number; } | null;
+  lastSeen: { seconds: number; nanoseconds: number; } | null;
   pubgId?: string;
   pubgName?: string;
   freefireId?: string;
@@ -59,6 +60,7 @@ interface AuthContextType {
   giveBonus: (userId: string, amount: number, reason: string) => Promise<void>;
   updateWithdrawalDetails: (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'jazzcashName' | 'easypaisaNumber' | 'easypaisaName'>>) => Promise<void>;
   transferFunds: (recipientId: string, amount: number, currency: 'coins' | 'pkr') => Promise<void>;
+  updatePresence: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -80,17 +82,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [coinToPkrRate, setCoinToPkrRate] = useState<number | null>(null);
   const { toast } = useToast();
 
-  // Effect to fetch and listen to the wallet config for the conversion rate
   useEffect(() => {
     const configRef = doc(db, 'config', 'wallet');
     const unsubConfig = onSnapshot(configRef, (docSnap) => {
       if (docSnap.exists()) {
         setCoinToPkrRate(docSnap.data().coinToPkrRate || 1);
       } else {
-        setCoinToPkrRate(1); // Default value if not set
+        setCoinToPkrRate(1); 
       }
     }, () => {
-      setCoinToPkrRate(1); // Fallback on error
+      setCoinToPkrRate(1); 
     });
     return () => unsubConfig();
   }, []);
@@ -100,7 +101,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let unsubDoc: () => void = () => {};
 
     const unsubscribeAuth = onAuthStateChanged(auth, (fbUser) => {
-      // First, unsubscribe from any previous user's document listener
       if (unsubDoc) {
         unsubDoc();
       }
@@ -109,12 +109,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setFirebaseUser(fbUser);
         const userDocRef = doc(db, 'users', fbUser.uid);
         
-        // Subscribe to the new user's document
         unsubDoc = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists() && coinToPkrRate !== null) {
             const userData = docSnap.data();
 
-            // Automatically calculate PKR balance based on the current rate
             const pkrBalance = Math.floor((userData.coins / 100000) * coinToPkrRate);
 
             setUser({
@@ -123,13 +121,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               displayName: fbUser.displayName,
               emailVerified: fbUser.emailVerified,
               coins: userData.coins,
-              pkrBalance: pkrBalance, // Dynamically calculated
+              pkrBalance: pkrBalance,
               referralCode: userData.referralCode,
               admin: userData.admin || false,
               lastClaimTimestamp: userData.lastClaimTimestamp || null,
               dailyStreakCount: userData.dailyStreakCount || 0,
               lastDailyClaim: userData.lastDailyClaim || null,
               lastFaucetClaimTimestamp: userData.lastFaucetClaimTimestamp || null,
+              lastSeen: userData.lastSeen || null,
               pubgId: userData.pubgId,
               pubgName: userData.pubgName,
               freefireId: userData.freefireId,
@@ -141,7 +140,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             });
              setLoading(false);
           } else if (!docSnap.exists()){
-             // If user doc doesn't exist yet (e.g., during signup), don't show loading forever
              setLoading(false);
           }
         }, (error) => {
@@ -186,7 +184,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const fbUser = userCredential.user;
     let referred = false;
     let referrerId: string | null = null;
-    let initialCoins = 200; // Universal welcome bonus
+    let initialCoins = 200;
 
     const userDocRef = doc(db, 'users', fbUser.uid);
     const docSnap = await getDoc(userDocRef);
@@ -204,14 +202,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         }
       
-        // Handle unique display name for Google Sign-In
         const usersRef = collection(db, 'users');
         let finalDisplayName = fbUser.displayName || `user_${fbUser.uid.substring(0, 6)}`;
         const qName = query(usersRef, where('displayName', '==', finalDisplayName));
         const nameQuerySnapshot = await getDocs(qName);
 
         if (!nameQuerySnapshot.empty) {
-          // If name exists, append part of the UID to make it unique
           finalDisplayName = `${finalDisplayName}_${fbUser.uid.substring(0, 4)}`;
         }
 
@@ -228,6 +224,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         dailyStreakCount: 0,
         lastDailyClaim: null,
         lastFaucetClaimTimestamp: null,
+        lastSeen: serverTimestamp(),
       });
       await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
     }
@@ -246,7 +243,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     let referred = false;
     let referrerId: string | null = null;
-    const initialCoins = 200; // Universal welcome bonus
+    const initialCoins = 200;
 
     if (referralCode) {
         const referralQuery = query(collection(db, 'users'), where('referralCode', '==', referralCode), limit(1));
@@ -279,6 +276,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       dailyStreakCount: 0,
       lastDailyClaim: null,
       lastFaucetClaimTimestamp: null,
+      lastSeen: serverTimestamp(),
     });
     await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
 
@@ -326,7 +324,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (!user) throw new Error("User not authenticated");
 
     const userRef = doc(db, 'users', user.uid);
-    // Use the user state which is real-time
     const lastClaimDate = user.lastDailyClaim ? new Date(user.lastDailyClaim.seconds * 1000) : null;
     
     if (lastClaimDate && isToday(lastClaimDate)) {
@@ -336,14 +333,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     let currentStreak = user.dailyStreakCount || 0;
     
     if (lastClaimDate && isYesterday(lastClaimDate)) {
-        // Continue streak
         currentStreak++;
     } else {
-        // Reset streak if last claim wasn't yesterday (or if it's the first claim)
         currentStreak = 1;
     }
     
-    // Reset after 7 days
     if (currentStreak > 7) {
         currentStreak = 1;
     }
@@ -368,10 +362,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       throw new Error("Cannot process transaction: conversion rate is invalid.");
     }
 
-    // Use ceil to make sure we deduct enough coins, even for fractions of a pkr.
     const coinsToDeduct = Math.ceil((pkrAmount / coinToPkrRate) * 100000);
     
-    // Final check against actual coin balance to prevent floating point inaccuracies.
     if (user.coins < coinsToDeduct) {
         throw new Error("Insufficient coin balance for this transaction.");
     }
@@ -419,7 +411,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             throw new Error("Insufficient coin balance.");
           }
           description = `${amount.toLocaleString()} coins`;
-        } else { // currency === 'pkr'
+        } else { 
           if (coinToPkrRate === null || coinToPkrRate <= 0) {
             throw new Error("Cannot process transaction: conversion rate is invalid.");
           }
@@ -434,11 +426,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           description = `${amount.toLocaleString()} PKR`;
         }
 
-        // Perform updates within the transaction
         transaction.update(senderRef, { coins: increment(-coinsToTransfer) });
         transaction.update(recipientRef, { coins: increment(coinsToTransfer) });
 
-        // Create transaction logs (can't use serverTimestamp in a transaction)
         const now = new Date();
         const senderLog = { type: 'transfer-sent', amount: -coinsToTransfer, description: `Sent ${description} to ${recipientData.displayName || recipientId}`, date: now };
         const recipientLog = { type: 'transfer-received', amount: coinsToTransfer, description: `Received ${description} from ${senderData.displayName || user.uid}`, date: now };
@@ -447,8 +437,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         transaction.set(doc(collection(db, 'users', recipientId, 'transactions')), recipientLog);
       });
     } catch(e: any) {
-        // The transaction function automatically throws on failure, so we catch it here.
-        // We re-throw so the UI can catch it and display a message.
         throw new Error(e.message || "Transfer failed. Please try again.");
     }
   };
@@ -480,20 +468,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                   throw new Error("User not found.");
               }
               
-              // Perform the coin update
               t.update(userRef, { coins: increment(amount) });
 
-              // Create the transaction log
               const transactionRef = doc(collection(db, 'users', userId, 'transactions'));
               t.set(transactionRef, {
                   type: 'bonus',
                   amount,
                   description: `Admin Bonus: ${reason}`,
-                  date: new Date(), // Using new Date() because serverTimestamp is not allowed in transactions
+                  date: new Date(), 
               });
           });
       } catch (e: any) {
-          // Re-throw for the UI to handle
           throw new Error(e.message || "Bonus transaction failed.");
       }
   };
@@ -504,7 +489,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await updateDoc(userRef, details);
   };
 
-  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds };
+  const updatePresence = async () => {
+    if (auth.currentUser) {
+        const userRef = doc(db, 'users', auth.currentUser.uid);
+        try {
+            await updateDoc(userRef, { lastSeen: serverTimestamp() });
+        } catch (error) {
+            console.warn("Could not update presence:", error);
+        }
+    }
+  };
+
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds, updatePresence };
 
   return (
     <AuthContext.Provider value={value}>

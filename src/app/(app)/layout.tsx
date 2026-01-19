@@ -22,7 +22,7 @@ import { useAdBlockDetector } from '@/hooks/use-ad-block-detector';
 import { AdBlockerOverlay } from '@/components/ad-blocker-overlay';
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+  const { user, loading, updatePresence } = useAuth();
   const router = useRouter();
   const { adBlockerDetected } = useAdBlockDetector();
 
@@ -35,6 +35,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       }
     }
   }, [user, loading, router]);
+
+  React.useEffect(() => {
+    if (user?.uid) {
+      updatePresence(); // Initial update
+      const intervalId = setInterval(updatePresence, 5 * 60 * 1000); // every 5 minutes
+      
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === 'visible') {
+          updatePresence();
+        }
+      }
+      
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+
+      return () => {
+        clearInterval(intervalId);
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      };
+    }
+  }, [user?.uid, updatePresence]);
+
 
   if (loading || !user || !user.emailVerified) {
     return (
