@@ -72,9 +72,9 @@ export function UserNav() {
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={logout} disabled={user.disableLogout}>
+        <DropdownMenuItem onClick={logout}>
           <LogOut />
-          {user.disableLogout ? "Logout Disabled" : "Log out"}
+          Log out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

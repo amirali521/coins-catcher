@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -15,7 +14,7 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth, db } from '@/firebase/init';
-import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection, addDoc, runTransaction, writeBatch } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection, addDoc, runTransaction } from 'firebase/firestore';
 import { isToday, isYesterday } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
@@ -28,8 +27,6 @@ interface User {
   pkrBalance: number;
   referralCode: string;
   admin: boolean;
-  blocked?: boolean;
-  disableLogout?: boolean;
   lastClaimTimestamp?: { seconds: number; nanoseconds: number; } | null; // Hourly
   dailyStreakCount: number;
   lastDailyClaim: { seconds: number; nanoseconds: number; } | null;
@@ -62,7 +59,6 @@ interface AuthContextType {
   updateWithdrawalDetails: (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'jazzcashName' | 'easypaisaNumber' | 'easypaisaName'>>) => Promise<void>;
   transferFunds: (recipientId: string, amount: number, currency: 'coins' | 'pkr') => Promise<void>;
   updateUserBlockStatus: (userId: string, blocked: boolean) => Promise<void>;
-  updateUserLogoutStatus: (userId: string, disableLogout: boolean) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -75,15 +71,6 @@ const addTransaction = async (userId: string, type: string, amount: number, desc
         description,
         date: serverTimestamp(),
     });
-};
-
-const addActivityLog = async (userId: string, type: 'login' | 'logout') => {
-  const activityRef = collection(db, 'users', userId, 'activity');
-  await addDoc(activityRef, {
-    type,
-    timestamp: serverTimestamp(),
-    ip: 'not_tracked', // For privacy, but could be added
-  });
 };
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -123,8 +110,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         unsubDoc = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists() && coinToPkrRate !== null) {
             const userData = docSnap.data();
-
-             if (userData.blocked) {
+            const pkrBalance = Math.floor((userData.coins / 100000) * coinToPkrRate);
+            
+            if (userData.blocked) {
               firebaseSignOut(auth);
               toast({
                 variant: 'destructive',
@@ -137,8 +125,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               return;
             }
 
-            const pkrBalance = Math.floor((userData.coins / 100000) * coinToPkrRate);
-
             setUser({
               uid: fbUser.uid,
               email: fbUser.email,
@@ -148,8 +134,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               pkrBalance: pkrBalance,
               referralCode: userData.referralCode,
               admin: userData.admin || false,
-              blocked: userData.blocked || false,
-              disableLogout: userData.disableLogout || false,
               lastClaimTimestamp: userData.lastClaimTimestamp || null,
               dailyStreakCount: userData.dailyStreakCount || 0,
               lastDailyClaim: userData.lastDailyClaim || null,
@@ -209,7 +193,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       error.code = "auth/email-not-verified";
       throw error;
     }
-    await addActivityLog(fbUser.uid, 'login');
   }, []);
   
   const signInWithGoogle = useCallback(async (referralCode?: string | null) => {
@@ -259,7 +242,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         referredBy: referrerId,
         admin: false,
         blocked: false,
-        disableLogout: false,
         createdAt: serverTimestamp(),
         lastClaimTimestamp: null,
         dailyStreakCount: 0,
@@ -268,7 +250,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
     }
-    await addActivityLog(fbUser.uid, 'login');
     return { referred };
   }, []);
 
@@ -313,7 +294,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       referredBy: referrerId,
       admin: false,
       blocked: false,
-      disableLogout: false,
       createdAt: serverTimestamp(),
       lastClaimTimestamp: null,
       dailyStreakCount: 0,
@@ -327,26 +307,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const logout = useCallback(async () => {
-    if (user?.disableLogout) {
-      toast({
-        variant: 'destructive',
-        title: 'Logout Disabled',
-        description: 'Your logout function has been disabled by an administrator.',
-      });
-      return;
-    }
-    
-    // Best-effort attempt to log the logout event.
-    if (user) {
-        try {
-            await addActivityLog(user.uid, 'logout');
-        } catch (e) {
-            // Log to console, but don't block the user from logging out.
-            console.error("Failed to write logout activity:", e);
-        }
-    }
-
-    // The critical logout operation.
     try {
       await firebaseSignOut(auth);
     } catch (error: any) {
@@ -356,7 +316,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             description: error.message.replace('Firebase: ', ''),
         });
     }
-  }, [user, toast]);
+  }, [toast]);
 
   const claimHourlyReward = useCallback(async (amount: number) => {
     if (user) {
@@ -557,13 +517,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await updateDoc(userRef, { blocked });
   }, [user]);
 
-  const updateUserLogoutStatus = useCallback(async (userId: string, disableLogout: boolean) => {
-    if (!user?.admin) throw new Error("You are not authorized to perform this action.");
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, { disableLogout });
-  }, [user]);
-
-  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds, updateUserBlockStatus, updateUserLogoutStatus };
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds, updateUserBlockStatus };
 
   return (
     <AuthContext.Provider value={value}>

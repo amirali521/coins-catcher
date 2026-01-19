@@ -1,16 +1,16 @@
 
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc, limit, where, getDocs } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/firebase/init';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
-import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon, Settings, LayoutDashboard, UserCog, ShieldAlert } from 'lucide-react';
+import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon, Settings, LayoutDashboard, UserCog, Ban } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -20,7 +20,7 @@ import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/lib/auth';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
@@ -32,7 +32,6 @@ interface AppUser {
     coins: number;
     admin: boolean;
     blocked?: boolean;
-    disableLogout?: boolean;
     createdAt: { seconds: number; nanoseconds: number; } | null;
     referredBy?: string;
 }
@@ -441,68 +440,43 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(true);
     const [bonusUser, setBonusUser] = useState<AppUser | null>(null);
     const router = useRouter();
-    const [activityCounts, setActivityCounts] = useState<Record<string, number>>({});
+    const { updateUserBlockStatus } = useAuth();
+    const { toast } = useToast();
 
     useEffect(() => {
         const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
         
-        // Fetch initial user data and activity counts once.
-        const fetchInitialData = async () => {
-            try {
-                const querySnapshot = await getDocs(usersQuery);
-                const usersData: AppUser[] = [];
-                querySnapshot.forEach((doc) => {
-                    usersData.push({ ...doc.data(), uid: doc.id } as AppUser);
-                });
-                
-                setUsers(usersData);
-                
-                // Fetch activity counts for the initial user list
-                const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-                const countPromises = usersData.map(user => 
-                    getDocs(query(
-                        collection(db, 'users', user.uid, 'activity'),
-                        where('timestamp', '>=', twentyFourHoursAgo),
-                        where('type', '==', 'login')
-                    )).then(snapshot => ({ uid: user.uid, count: snapshot.size }))
-                );
-                
-                const results = await Promise.all(countPromises);
-                const newCounts = results.reduce((acc, result) => {
-                    acc[result.uid] = result.count;
-                    return acc;
-                }, {} as Record<string, number>);
-                setActivityCounts(newCounts);
-
-            } catch (error) {
-                console.error("Error fetching initial data:", error);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchInitialData();
-
-        // Set up a real-time listener for the user list ONLY.
-        // This will keep the user list (coins, names, etc.) up-to-date
-        // without re-triggering the expensive activity count query.
         const unsubscribe = onSnapshot(usersQuery, (querySnapshot) => {
             const usersData: AppUser[] = [];
             querySnapshot.forEach((doc) => {
                 usersData.push({ ...doc.data(), uid: doc.id } as AppUser);
             });
             setUsers(usersData);
+            setLoading(false);
         }, (error) => {
             console.error("Error with real-time user listener:", error);
+             setLoading(false);
         });
 
         return () => unsubscribe();
-    }, []); // Empty dependency array ensures this runs only once on mount.
+    }, []);
 
     const getInitials = (name: string | null) => {
         if (!name) return "U";
         return name.split(" ").map((n) => n[0]).join("");
     };
+
+    const handleToggleBlock = async (user: AppUser) => {
+        try {
+            await updateUserBlockStatus(user.uid, !user.blocked);
+            toast({
+                title: `User ${!user.blocked ? 'Blocked' : 'Unblocked'}`,
+                description: `${user.displayName} has been ${!user.blocked ? 'blocked' : 'unblocked'}.`,
+            });
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Error', description: error.message });
+        }
+    }
 
     return (
         <div className="grid gap-6">
@@ -529,7 +503,7 @@ export default function AdminPage() {
                  <Card>
                     <CardHeader>
                         <CardTitle>Users</CardTitle>
-                        <CardDescription>A list of all registered users. Click a user to view their details.</CardDescription>
+                        <CardDescription>A list of all registered users.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Table>
@@ -550,7 +524,7 @@ export default function AdminPage() {
                                         </TableCell>
                                     </TableRow>
                                 ) : users.map((user) => (
-                                    <TableRow key={user.uid} onClick={() => router.push(`/admin/users/${user.uid}`)} className="cursor-pointer">
+                                    <TableRow key={user.uid}>
                                         <TableCell>
                                             <div className="flex items-center gap-3">
                                                 <Avatar>
@@ -560,9 +534,6 @@ export default function AdminPage() {
                                                 <div>
                                                     <p className="font-medium flex items-center gap-2">
                                                         {user.displayName || 'N/A'}
-                                                        {(activityCounts[user.uid] || 0) > 5 && (
-                                                            <ShieldAlert className="h-4 w-4 text-destructive" title="Suspicious Activity" />
-                                                        )}
                                                     </p>
                                                     <p className="text-sm text-muted-foreground">{user.email}</p>
                                                 </div>
@@ -581,10 +552,14 @@ export default function AdminPage() {
                                         <TableCell className="text-muted-foreground">
                                             {user.createdAt ? formatDistanceToNow(new Date(user.createdAt.seconds * 1000), { addSuffix: true }) : 'N/A'}
                                         </TableCell>
-                                        <TableCell className="text-right">
-                                            <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setBonusUser(user); }}>
+                                        <TableCell className="text-right space-x-2">
+                                            <Button variant="ghost" size="sm" onClick={() => setBonusUser(user)}>
                                                 <Gift className="mr-2 h-4 w-4" />
                                                 Bonus
+                                            </Button>
+                                            <Button variant={user.blocked ? 'secondary' : 'destructive'} size="sm" onClick={() => handleToggleBlock(user)}>
+                                                <Ban className="mr-2 h-4 w-4" />
+                                                {user.blocked ? 'Unblock' : 'Block'}
                                             </Button>
                                         </TableCell>
                                     </TableRow>

@@ -32,18 +32,17 @@ service cloud.firestore {
                     && request.resource.data.admin == false
                     && request.resource.data.coins == 200;
       
-      // Users can update their own document, but cannot change their admin status, blocked status, or logout status.
-      // Admins can update 'blocked' and 'disableLogout' status.
+      // Users can update their own document, but cannot change their admin status.
+      // Admins can update 'blocked' status.
       // Any user can update another user's 'coins' field (for transfers).
       allow update: if (
                       isOwner(userId) &&
                       request.resource.data.admin == resource.data.admin &&
-                      request.resource.data.blocked == resource.data.blocked &&
-                      request.resource.data.disableLogout == resource.data.disableLogout
+                      request.resource.data.blocked == resource.data.blocked
                     ) || (
                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins'])
                     ) || (
-                      isAdmin() && request.resource.data.diff(resource.data).hasAny(['blocked', 'disableLogout'])
+                      isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked'])
                     );
 
 
@@ -59,12 +58,6 @@ service cloud.firestore {
         allow create: if isOwner(userId) || request.resource.data.amount > 0;
         
         // Transactions are immutable.
-        allow update, delete: if false;
-      }
-
-      match /activity/{activityId} {
-        allow create: if isOwner(userId);
-        allow read, list: if isAdmin();
         allow update, delete: if false;
       }
     }
