@@ -1,16 +1,18 @@
+
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Gift, Clock, Coins, CheckCircle } from "lucide-react";
+import { Gift, Clock, Coins, CheckCircle, Hand, Gem } from "lucide-react";
 import { BannerAd } from "@/components/ads/banner-ad";
 import FaucetBannerAd from "@/components/ads/faucet-banner-ad";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { isToday } from "date-fns";
 import { cn, formatLargeNumber } from "@/lib/utils";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const HOURLY_CLAIM_COOLDOWN_HOURS = 3;
 const HOURLY_CLAIM_AMOUNT = 100;
@@ -20,7 +22,7 @@ const DAILY_REWARDS = [15, 30, 45, 60, 75, 90, 120];
 
 
 export default function DashboardPage() {
-  const { user, claimHourlyReward, claimFaucetReward, claimDailyReward } = useAuth();
+  const { user, claimHourlyReward, claimFaucetReward, claimDailyReward, claimTapTapReward } = useAuth();
   const { toast } = useToast();
   const [faucetPopoverOpen, setFaucetPopoverOpen] = useState(false);
   const [faucetAdClicked, setFaucetAdClicked] = useState(false);
@@ -31,6 +33,10 @@ export default function DashboardPage() {
   const [faucetTimeLeft, setFaucetTimeLeft] = useState<number | null>(null);
   const [canClaimFaucet, setCanClaimFaucet] = useState(false);
   const [canClaimDaily, setCanClaimDaily] = useState(false);
+
+  const [tapTapCoins, setTapTapCoins] = useState(0);
+  const [isTapping, setIsTapping] = useState(false);
+  const [tapTapAdClicked, setTapTapAdClicked] = useState(false);
 
 
   const calculateCooldowns = useCallback(() => {
@@ -183,11 +189,46 @@ export default function DashboardPage() {
       }
   }
 
+  const handleTap = () => {
+    setIsTapping(true);
+    setTapTapCoins(c => c + 1);
+    setTimeout(() => setIsTapping(false), 150);
+  };
+
+  const handleTapTapClaim = async () => {
+    const mainCoinsToAdd = Math.floor(tapTapCoins / 10);
+    
+    if (!tapTapAdClicked) {
+      toast({ variant: 'destructive', title: 'Task not completed', description: 'Please click the link in Step 1 first.' });
+      return;
+    }
+    if (mainCoinsToAdd <= 0) {
+      toast({ variant: 'destructive', title: 'Not enough coins', description: 'You need at least 10 TapTap coins to claim.' });
+      return;
+    }
+
+    try {
+      await claimTapTapReward(mainCoinsToAdd);
+      toast({
+        title: '🎉 TapTap Reward Claimed!',
+        description: `You converted ${mainCoinsToAdd * 10} TapTap Coins into ${mainCoinsToAdd} main coins.`,
+      });
+      setTapTapCoins(prev => prev % 10); // Keep the remainder
+      setTapTapAdClicked(false);
+    } catch (error: any) {
+      console.error("Failed to claim TapTap reward:", error);
+      toast({
+        variant: "destructive",
+        title: "Claim Failed",
+        description: error.message || "There was an issue claiming your reward.",
+      });
+    }
+  };
+
   const currentStreak = user?.dailyStreakCount || 0;
   const lastDailyClaimDate = user?.lastDailyClaim ? new Date(user.lastDailyClaim.seconds * 1000) : null;
   const isClaimedToday = lastDailyClaimDate ? isToday(lastDailyClaimDate) : false;
   
-  // This logic determines which day is the next to be claimed for the UI
   let nextClaimDay;
   if (isClaimedToday) {
       nextClaimDay = (currentStreak % 7) + 1;
@@ -195,164 +236,213 @@ export default function DashboardPage() {
       nextClaimDay = currentStreak + 1;
   }
 
-
   return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <div className="md:col-span-2">
+    <div className="grid gap-6">
+       <div className="col-span-full">
         <h1 className="text-3xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground">Welcome back, {user?.displayName}! Here are your earnings.</p>
       </div>
 
-      <Card className="flex flex-col">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Gift className="text-primary" />
-            <span>Hourly Reward</span>
-          </CardTitle>
-          <CardDescription>
-            Claim your free coins every {HOURLY_CLAIM_COOLDOWN_HOURS} hours.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col flex-1 items-center justify-center gap-6 text-center">
-          <div>
-            {canClaimHourly ? (
-              <>
-                <p className="text-lg text-muted-foreground">Your reward is ready!</p>
-                <p className="text-5xl font-bold text-primary flex items-center justify-center gap-2">
-                  <Coins className="h-10 w-10"/> {HOURLY_CLAIM_AMOUNT}
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-lg text-muted-foreground">Next claim in:</p>
-                <p className="text-5xl font-bold font-mono text-foreground flex items-center justify-center gap-2">
-                  <Clock className="h-10 w-10"/> {formatTime(hourlyTimeLeft)}
-                </p>
-              </>
-            )}
-          </div>
-          <BannerAd />
-          <Button
-            size="lg"
-            className="w-full max-w-xs text-lg py-6 transition-transform duration-200 hover:scale-105"
-            onClick={handleHourlyClaim}
-            disabled={!canClaimHourly}
-          >
-            {canClaimHourly ? (hourlyAdLinkClicked ? 'Confirm Claim' : 'Claim Now') : "Come Back Later"}
-          </Button>
-        </CardContent>
-      </Card>
-      
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Balance</CardTitle>
-          <CardDescription>Your total coins and their estimated PKR value.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col items-center justify-center gap-1 pt-2">
-            <div className="flex items-center justify-center text-6xl font-bold text-primary gap-4">
-              <Coins className="h-16 w-16" />
-              <span>{formatLargeNumber(user?.coins)}</span>
-            </div>
-            <div className="w-full flex justify-between items-baseline text-sm px-4">
-                <span className="text-muted-foreground">{user?.coins?.toLocaleString() ?? '0'} coins</span>
-                <span className="font-semibold text-green-500">~ {user?.pkrBalance?.toLocaleString() ?? '0'} PKR</span>
-            </div>
-        </CardContent>
-      </Card>
-
-      <Card className="md:col-span-2">
-        <CardHeader>
-            <CardTitle>Weekly Streak</CardTitle>
-            <CardDescription>Claim a reward every day. The more you claim in a row, the bigger the reward!</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <div className="grid grid-cols-4 md:grid-cols-7 gap-2 md:gap-4 text-center">
-                {DAILY_REWARDS.map((reward, index) => {
-                    const dayNumber = index + 1;
-                    const isCompleted = isClaimedToday ? dayNumber <= currentStreak : dayNumber <= currentStreak;
-                    const isTodayToClaim = !isClaimedToday && dayNumber === nextClaimDay;
-
-                    return (
-                        <div key={dayNumber} className={cn(
-                            "rounded-lg p-3 flex flex-col items-center justify-center border",
-                             isCompleted && dayNumber !== nextClaimDay ? "bg-primary/20 border-primary/50" : "bg-muted/50",
-                             isTodayToClaim && "border-primary ring-2 ring-primary/50"
-                        )}>
-                            <p className="text-xs text-muted-foreground">Day {dayNumber}</p>
-                             <div className="flex items-center gap-1 font-bold text-xl my-1">
-                                <Coins className="h-5 w-5 text-yellow-400" />
-                                <span>{reward}</span>
-                            </div>
-                            {isCompleted && dayNumber !== nextClaimDay && <CheckCircle className="h-5 w-5 text-primary" />}
-                        </div>
-                    )
-                })}
-            </div>
-             <Button
-                size="lg"
-                className="w-full mt-6"
-                onClick={handleDailyClaim}
-                disabled={!canClaimDaily}
-            >
-                {canClaimDaily ? `Claim Day ${nextClaimDay} Reward` : "Come back tomorrow"}
-            </Button>
-        </CardContent>
-      </Card>
-
-      <Card className="md:col-span-2">
-        <CardHeader>
-            <CardTitle>Faucet Reward</CardTitle>
-            <CardDescription>Complete a simple task to earn a special reward. Cooldown is separate from the hourly reward.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex items-center justify-center pt-4">
-            <Popover open={faucetPopoverOpen} onOpenChange={(open) => {
-              setFaucetPopoverOpen(open);
-              // Reset ad click state when popover is closed manually
-              if (!open) {
-                setFaucetAdClicked(false);
-              }
-            }}>
-                <PopoverTrigger asChild>
-                    <Button
-                        size="lg"
-                        variant="outline"
-                        className="w-full max-w-xs text-lg py-6 transition-transform duration-200 hover:scale-105 border-primary/50 text-primary hover:bg-primary/10 hover:text-primary"
-                    >
-                        <Coins className="mr-2 h-6 w-6"/>
-                        Claim {FAUCET_CLAIM_AMOUNT} Coins Faucet
-                    </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto" align="center">
-                    <div className="grid gap-4">
-                        <div className="space-y-1">
-                            <h4 className="font-medium leading-none">Click the ad to claim</h4>
-                            <p className="text-sm text-muted-foreground">
-                            Click the banner below, then you can claim your reward.
-                            </p>
-                        </div>
-                        <div 
-                            className="flex justify-center"
-                        >
-                            <FaucetBannerAd />
-                        </div>
-                        <Button onClick={handleFaucetClaim} disabled={!faucetAdClicked || !canClaimFaucet}>
-                            <Gift className="mr-2 h-4 w-4" />
-                            {!canClaimFaucet
-                                ? `Claim in ${formatTime(faucetTimeLeft)}`
-                                : faucetAdClicked 
-                                    ? `Claim ${FAUCET_CLAIM_AMOUNT} Coins`
-                                    : "Waiting for ad click..."
-                            }
-                        </Button>
+      <Tabs defaultValue="rewards" className="w-full col-span-full">
+        <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="rewards"><Gift className="mr-2 h-4 w-4" />Main Rewards</TabsTrigger>
+            <TabsTrigger value="taptap"><Hand className="mr-2 h-4 w-4" />TapTap Miner</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="rewards" className="mt-6">
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card className="flex flex-col">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Gift className="text-primary" />
+                    <span>Hourly Reward</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Claim your free coins every {HOURLY_CLAIM_COOLDOWN_HOURS} hours.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col flex-1 items-center justify-center gap-6 text-center">
+                  <div>
+                    {canClaimHourly ? (
+                      <>
+                        <p className="text-lg text-muted-foreground">Your reward is ready!</p>
+                        <p className="text-5xl font-bold text-primary flex items-center justify-center gap-2">
+                          <Coins className="h-10 w-10"/> {HOURLY_CLAIM_AMOUNT}
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-lg text-muted-foreground">Next claim in:</p>
+                        <p className="text-5xl font-bold font-mono text-foreground flex items-center justify-center gap-2">
+                          <Clock className="h-10 w-10"/> {formatTime(hourlyTimeLeft)}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                  <BannerAd />
+                  <Button
+                    size="lg"
+                    className="w-full max-w-xs text-lg py-6 transition-transform duration-200 hover:scale-105"
+                    onClick={handleHourlyClaim}
+                    disabled={!canClaimHourly}
+                  >
+                    {canClaimHourly ? (hourlyAdLinkClicked ? 'Confirm Claim' : 'Claim Now') : "Come Back Later"}
+                  </Button>
+                </CardContent>
+              </Card>
+              
+              <Card>
+                <CardHeader>
+                  <CardTitle>Your Balance</CardTitle>
+                  <CardDescription>Your total coins and their estimated PKR value.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col items-center justify-center gap-1 pt-2">
+                    <div className="flex items-center justify-center text-6xl font-bold text-primary gap-4">
+                      <Coins className="h-16 w-16" />
+                      <span>{formatLargeNumber(user?.coins)}</span>
                     </div>
-                </PopoverContent>
-            </Popover>
-        </CardContent>
-      </Card>
+                    <div className="w-full flex justify-between items-baseline text-sm px-4">
+                        <span className="text-muted-foreground">{user?.coins?.toLocaleString() ?? '0'} coins</span>
+                        <span className="font-semibold text-green-500">~ {user?.pkrBalance?.toLocaleString() ?? '0'} PKR</span>
+                    </div>
+                </CardContent>
+              </Card>
 
-      <div className="md:col-span-2 flex justify-center">
-        <BannerAd />
-      </div>
+              <Card className="md:col-span-2">
+                <CardHeader>
+                    <CardTitle>Weekly Streak</CardTitle>
+                    <CardDescription>Claim a reward every day. The more you claim in a row, the bigger the reward!</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="grid grid-cols-4 md:grid-cols-7 gap-2 md:gap-4 text-center">
+                        {DAILY_REWARDS.map((reward, index) => {
+                            const dayNumber = index + 1;
+                            const isCompleted = isClaimedToday ? dayNumber <= currentStreak : dayNumber <= currentStreak;
+                            const isTodayToClaim = !isClaimedToday && dayNumber === nextClaimDay;
+
+                            return (
+                                <div key={dayNumber} className={cn(
+                                    "rounded-lg p-3 flex flex-col items-center justify-center border",
+                                     isCompleted && dayNumber !== nextClaimDay ? "bg-primary/20 border-primary/50" : "bg-muted/50",
+                                     isTodayToClaim && "border-primary ring-2 ring-primary/50"
+                                )}>
+                                    <p className="text-xs text-muted-foreground">Day {dayNumber}</p>
+                                     <div className="flex items-center gap-1 font-bold text-xl my-1">
+                                        <Coins className="h-5 w-5 text-yellow-400" />
+                                        <span>{reward}</span>
+                                    </div>
+                                    {isCompleted && dayNumber !== nextClaimDay && <CheckCircle className="h-5 w-5 text-primary" />}
+                                </div>
+                            )
+                        })}
+                    </div>
+                     <Button
+                        size="lg"
+                        className="w-full mt-6"
+                        onClick={handleDailyClaim}
+                        disabled={!canClaimDaily}
+                    >
+                        {canClaimDaily ? `Claim Day ${nextClaimDay} Reward` : "Come back tomorrow"}
+                    </Button>
+                </CardContent>
+              </Card>
+
+              <Card className="md:col-span-2">
+                <CardHeader>
+                    <CardTitle>Faucet Reward</CardTitle>
+                    <CardDescription>Complete a simple task to earn a special reward. Cooldown is separate from the hourly reward.</CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center justify-center pt-4">
+                    <Popover open={faucetPopoverOpen} onOpenChange={(open) => {
+                      setFaucetPopoverOpen(open);
+                      if (!open) {
+                        setFaucetAdClicked(false);
+                      }
+                    }}>
+                        <PopoverTrigger asChild>
+                            <Button
+                                size="lg"
+                                variant="outline"
+                                className="w-full max-w-xs text-lg py-6 transition-transform duration-200 hover:scale-105 border-primary/50 text-primary hover:bg-primary/10 hover:text-primary"
+                            >
+                                <Coins className="mr-2 h-6 w-6"/>
+                                Claim {FAUCET_CLAIM_AMOUNT} Coins Faucet
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto" align="center">
+                            <div className="grid gap-4">
+                                <div className="space-y-1">
+                                    <h4 className="font-medium leading-none">Click the ad to claim</h4>
+                                    <p className="text-sm text-muted-foreground">
+                                    Click the banner below, then you can claim your reward.
+                                    </p>
+                                </div>
+                                <div className="flex justify-center">
+                                    <FaucetBannerAd />
+                                </div>
+                                <Button onClick={handleFaucetClaim} disabled={!faucetAdClicked || !canClaimFaucet}>
+                                    <Gift className="mr-2 h-4 w-4" />
+                                    {!canClaimFaucet
+                                        ? `Claim in ${formatTime(faucetTimeLeft)}`
+                                        : faucetAdClicked 
+                                            ? `Claim ${FAUCET_CLAIM_AMOUNT} Coins`
+                                            : "Waiting for ad click..."
+                                    }
+                                </Button>
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+                </CardContent>
+              </Card>
+
+              <div className="md:col-span-2 flex justify-center">
+                <BannerAd />
+              </div>
+            </div>
+        </TabsContent>
+        
+        <TabsContent value="taptap" className="mt-6">
+            <Card className="flex flex-col items-center justify-center text-center">
+                <CardHeader>
+                    <CardTitle>TapTap Miner</CardTitle>
+                    <CardDescription>Tap the gem to mine TapTap Coins. Claim them to convert to main coins!</CardDescription>
+                </CardHeader>
+                <CardContent className="flex flex-col items-center gap-6">
+                    <div className="text-center">
+                        <p className="text-7xl font-bold text-primary flex items-center justify-center gap-2">
+                            <Gem className="h-16 w-16" /> {formatLargeNumber(tapTapCoins)}
+                        </p>
+                        <p className="text-muted-foreground">TapTap Coins Mined</p>
+                    </div>
+                     <Button
+                        onClick={handleTap}
+                        variant="ghost"
+                        className={cn(
+                            "rounded-full h-48 w-48 relative transition-transform duration-100 ease-in-out",
+                            isTapping && 'scale-95'
+                        )}
+                    >
+                        <Gem className="h-40 w-40 text-primary drop-shadow-[0_0_15px_hsl(var(--primary)/0.5)]" />
+                        <span className="absolute text-3xl font-bold text-primary-foreground drop-shadow-lg">TAP</span>
+                    </Button>
+                </CardContent>
+                <CardFooter className="flex-col gap-4 w-full max-w-sm border-t pt-6">
+                    <div className="text-sm text-muted-foreground font-semibold">
+                        10 TapTap Coins = 1 Main Coin
+                    </div>
+                    <Button variant="outline" className="w-full" onClick={() => {
+                        window.open('https://www.effectivegatecpm.com/rjxuuya9?key=0ca0a474faa38ad1b07174333d291e37', '_blank');
+                        setTapTapAdClicked(true);
+                    }}>
+                        Step 1: Open Link
+                    </Button>
+                    <Button className="w-full" onClick={handleTapTapClaim} disabled={!tapTapAdClicked || tapTapCoins < 10}>
+                        Step 2: Claim {Math.floor(tapTapCoins / 10)} Main Coins
+                    </Button>
+                </CardFooter>
+            </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

@@ -69,6 +69,7 @@ interface AuthContextType {
   claimHourlyReward: (amount: number) => Promise<void>;
   claimFaucetReward: (amount: number) => Promise<void>;
   claimDailyReward: () => Promise<{ amount: number; newStreak: number }>;
+  claimTapTapReward: (amount: number) => Promise<void>;
   requestWithdrawal: (payload: WithdrawalRequestPayload) => Promise<void>;
   giveBonus: (userId: string, amount: number, reason: string) => Promise<void>;
   updateWithdrawalDetails: (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'jazzcashName' | 'easypaisaNumber' | 'easypaisaName'>>) => Promise<void>;
@@ -400,6 +401,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [user]);
 
+  const claimTapTapReward = useCallback(async (amount: number) => {
+    if (user) {
+      if (amount <= 0) {
+        throw new Error("Claim amount must be positive.");
+      }
+      const userRef = doc(db, 'users', user.uid);
+      await updateDoc(userRef, {
+        coins: increment(amount),
+      });
+      await addTransaction(user.uid, 'claim', amount, 'TapTap Coin reward');
+    } else {
+        throw new Error("User not authenticated.");
+    }
+  }, [user]);
+
   const DAILY_REWARDS = [15, 30, 45, 60, 75, 90, 120];
 
   const claimDailyReward = useCallback(async () => {
@@ -685,7 +701,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     }, [user]);
 
-  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, requestWithdrawal, giveBonus, updateWithdrawalDetails, transferFunds, updateUserBlockStatus, updateUserLogoutStatus, updateAllUsersLogoutStatus, approveWithdrawal, rejectWithdrawal };
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, claimTapTapReward, requestWithdrawal, giveBonus, updateWithdrawalDetails, transferFunds, updateUserBlockStatus, updateUserLogoutStatus, updateAllUsersLogoutStatus, approveWithdrawal, rejectWithdrawal };
 
   return (
     <AuthContext.Provider value={value}>
