@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -34,6 +33,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { formatLargeNumber } from "@/lib/utils";
 
 interface Transaction {
   id: string;
@@ -460,7 +460,7 @@ export default function WalletPage() {
                 <CardContent>
                     <div className="flex items-center gap-4 text-4xl font-bold text-primary">
                     <Coins className="h-12 w-12" />
-                    <span>{user?.coins.toLocaleString() ?? 0}</span>
+                    <span>{formatLargeNumber(user?.coins)}</span>
                     </div>
                 </CardContent>
                 </Card>
@@ -472,7 +472,7 @@ export default function WalletPage() {
                 <CardContent>
                     <div className="flex items-center gap-4 text-4xl font-bold text-accent">
                     <span className="text-2xl font-medium">PKR</span>
-                    <span>{user?.pkrBalance?.toLocaleString() ?? 0}</span>
+                    <span>{formatLargeNumber(user?.pkrBalance)}</span>
                     </div>
                 </CardContent>
                 </Card>
@@ -519,7 +519,7 @@ export default function WalletPage() {
                               </TableCell>
                               <TableCell>
                               <Badge variant={tx.amount < 0 ? "destructive" : "secondary"}>
-                                  {tx.amount > 0 ? '+' : ''}{tx.amount.toLocaleString()}
+                                  {tx.amount > 0 ? '+' : ''}{formatLargeNumber(tx.amount)}
                               </Badge>
                               </TableCell>
                               <TableCell className="text-right text-muted-foreground">

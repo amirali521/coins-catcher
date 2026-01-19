@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -23,6 +22,7 @@ import { useAuth } from '@/lib/auth';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { formatLargeNumber } from '@/lib/utils';
 
 
 interface AppUser {
@@ -378,7 +378,7 @@ function TopEarnersCard() {
                                     </Avatar>
                                     <span className="font-medium truncate">{user.displayName}</span>
                                </div>
-                               <Badge variant="secondary">{user.coins.toLocaleString()} Coins</Badge>
+                               <Badge variant="secondary">{formatLargeNumber(user.coins)} Coins</Badge>
                             </li>
                         ))}
                     </ul>
@@ -565,7 +565,7 @@ export default function AdminPage() {
                                                 <Badge variant="secondary">User</Badge>
                                             )}
                                         </TableCell>
-                                        <TableCell>{user.coins?.toLocaleString()}</TableCell>
+                                        <TableCell>{formatLargeNumber(user.coins)}</TableCell>
                                         <TableCell className="text-muted-foreground">
                                             {user.createdAt ? formatDistanceToNow(new Date(user.createdAt.seconds * 1000), { addSuffix: true }) : 'N/A'}
                                         </TableCell>

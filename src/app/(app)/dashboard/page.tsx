@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -11,7 +10,7 @@ import { BannerAd } from "@/components/ads/banner-ad";
 import FaucetBannerAd from "@/components/ads/faucet-banner-ad";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { isToday } from "date-fns";
-import { cn } from "@/lib/utils";
+import { cn, formatLargeNumber } from "@/lib/utils";
 
 const HOURLY_CLAIM_COOLDOWN_HOURS = 3;
 const HOURLY_CLAIM_AMOUNT = 100;
@@ -250,7 +249,7 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent className="flex items-center justify-center text-6xl font-bold text-primary gap-4">
           <Coins className="h-16 w-16" />
-          <span>{user?.coins?.toLocaleString() ?? 0}</span>
+          <span>{formatLargeNumber(user?.coins)}</span>
         </CardContent>
       </Card>
 
