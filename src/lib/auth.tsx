@@ -335,9 +335,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       return;
     }
+    
+    // Best-effort attempt to log the logout event.
     if (user) {
-      await addActivityLog(user.uid, 'logout');
+        try {
+            await addActivityLog(user.uid, 'logout');
+        } catch (e) {
+            // Log to console, but don't block the user from logging out.
+            console.error("Failed to write logout activity:", e);
+        }
     }
+
+    // The critical logout operation.
     try {
       await firebaseSignOut(auth);
     } catch (error: any) {
