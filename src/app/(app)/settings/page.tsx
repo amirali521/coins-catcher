@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -13,13 +12,14 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
-import { LogOut, Loader2, Save, Copy } from "lucide-react";
+import { LogOut, Loader2, Save, Copy, User, Settings as SettingsIcon, CreditCard } from "lucide-react";
 import React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const withdrawalSchema = z.object({
   pubgId: z.string().optional(),
@@ -204,47 +204,64 @@ export default function SettingsPage() {
         <p className="text-muted-foreground">Manage your account and preferences.</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Profile</CardTitle>
-          <CardDescription>Your personal information.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Name</Label>
-            <Input id="name" value={user?.displayName || ''} readOnly />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <Input id="email" value={user?.email || ''} readOnly />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="uid">Your User ID</Label>
-            <div className="flex items-center space-x-2">
-              <Input id="uid" value={user?.uid || ''} readOnly />
-              <Button onClick={handleCopyId} size="icon" variant="outline">
-                <Copy className="h-4 w-4" />
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">Share this ID to receive funds from other users.</p>
-          </div>
-        </CardContent>
-      </Card>
-      
-      <WithdrawalSettings />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Account</CardTitle>
-          <CardDescription>Manage your session.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="destructive" onClick={logout}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Sign Out
-          </Button>
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="profile" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="profile">
+            <User className="mr-2 h-4 w-4"/> Profile
+          </TabsTrigger>
+          <TabsTrigger value="withdrawal">
+            <CreditCard className="mr-2 h-4 w-4"/> Withdrawal
+          </TabsTrigger>
+          <TabsTrigger value="account">
+            <SettingsIcon className="mr-2 h-4 w-4"/> Account
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="profile" className="mt-6">
+            <Card>
+                <CardHeader>
+                <CardTitle>Profile</CardTitle>
+                <CardDescription>Your personal information.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                <div className="space-y-2">
+                    <Label htmlFor="name">Name</Label>
+                    <Input id="name" value={user?.displayName || ''} readOnly />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input id="email" value={user?.email || ''} readOnly />
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="uid">Your User ID</Label>
+                    <div className="flex items-center space-x-2">
+                    <Input id="uid" value={user?.uid || ''} readOnly />
+                    <Button onClick={handleCopyId} size="icon" variant="outline">
+                        <Copy className="h-4 w-4" />
+                    </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">Share this ID to receive funds from other users.</p>
+                </div>
+                </CardContent>
+            </Card>
+        </TabsContent>
+        <TabsContent value="withdrawal" className="mt-6">
+             <WithdrawalSettings />
+        </TabsContent>
+        <TabsContent value="account" className="mt-6">
+            <Card>
+                <CardHeader>
+                <CardTitle>Account</CardTitle>
+                <CardDescription>Manage your session.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                <Button variant="destructive" onClick={logout}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Sign Out
+                </Button>
+                </CardContent>
+            </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

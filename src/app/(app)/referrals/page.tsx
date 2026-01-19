@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -14,11 +13,12 @@ import {
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Copy, Gift, Users, Loader2 } from "lucide-react";
+import { Copy, Gift, Users, Loader2, Link as LinkIcon } from "lucide-react";
 import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/firebase/init";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface ReferredUser {
     uid: string;
@@ -38,8 +38,6 @@ export default function ReferralsPage() {
   useEffect(() => {
     if (!user?.uid) return;
 
-    // Removed orderBy from the query to prevent the index error.
-    // Sorting is now handled on the client-side.
     const q = query(
         collection(db, "users"), 
         where("referredBy", "==", user.uid)
@@ -57,7 +55,6 @@ export default function ReferralsPage() {
             });
         });
         
-        // Sort users by creation date, most recent first
         users.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
 
         setReferredUsers(users);
@@ -95,84 +92,100 @@ export default function ReferralsPage() {
         <p className="text-muted-foreground">Invite friends and earn more coins together!</p>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Referral Link</CardTitle>
-          <CardDescription>
-            Share this link with your friends. When they sign up using your code, you'll earn a 300 coin bonus, and they'll get a 200 coin welcome bonus to start!
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex w-full items-center space-x-2">
-            <Input value={referralLink} readOnly />
-            <Button onClick={handleCopy} size="icon">
-              <Copy className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardContent>
-        <CardFooter>
-            <div className="flex items-center text-sm text-muted-foreground">
-                <Gift className="mr-2 h-4 w-4 text-primary" />
-                <span>You'll receive <strong>300 coins</strong> and your friend will receive a <strong>200 coin</strong> welcome bonus.</span>
-            </div>
-        </CardFooter>
-      </Card>
+      <Tabs defaultValue="link" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="link">
+            <LinkIcon className="mr-2 h-4 w-4" />
+            Your Link
+          </TabsTrigger>
+          <TabsTrigger value="referrals">
+            <Users className="mr-2 h-4 w-4" />
+            Your Referrals ({referredUsers.length})
+          </TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-                <Users />
-                Your Referrals ({referredUsers.length})
-            </CardTitle>
-            <CardDescription>
-                Here's a list of users who have signed up using your referral code.
-            </CardDescription>
-        </CardHeader>
-        <CardContent>
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>User</TableHead>
-                        <TableHead className="text-right">User ID</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {loading ? (
+        <TabsContent value="link" className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Your Referral Link</CardTitle>
+              <CardDescription>
+                Share this link with your friends. When they sign up using your code, you'll earn a 300 coin bonus, and they'll get a 200 coin welcome bonus to start!
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex w-full items-center space-x-2">
+                <Input value={referralLink} readOnly />
+                <Button onClick={handleCopy} size="icon">
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </CardContent>
+            <CardFooter>
+                <div className="flex items-center text-sm text-muted-foreground">
+                    <Gift className="mr-2 h-4 w-4 text-primary" />
+                    <span>You'll receive <strong>300 coins</strong> and your friend will receive a <strong>200 coin</strong> welcome bonus.</span>
+                </div>
+            </CardFooter>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="referrals" className="mt-6">
+          <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <Users />
+                    Your Referrals ({referredUsers.length})
+                </CardTitle>
+                <CardDescription>
+                    Here's a list of users who have signed up using your referral code.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Table>
+                    <TableHeader>
                         <TableRow>
-                            <TableCell colSpan={2} className="h-24 text-center">
-                                <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-                            </TableCell>
+                            <TableHead>User</TableHead>
+                            <TableHead className="text-right">User ID</TableHead>
                         </TableRow>
-                    ) : referredUsers.length > 0 ? (
-                        referredUsers.map((refUser) => (
-                            <TableRow key={refUser.uid}>
-                                <TableCell>
-                                    <div className="flex items-center gap-3">
-                                        <Avatar>
-                                            <AvatarImage src={`https://avatar.vercel.sh/${refUser.email}.png`} alt={refUser.displayName} />
-                                            <AvatarFallback>{getInitials(refUser.displayName)}</AvatarFallback>
-                                        </Avatar>
-                                        <div>
-                                            <p className="font-medium">{refUser.displayName || 'N/A'}</p>
-                                            <p className="text-sm text-muted-foreground">{refUser.email}</p>
-                                        </div>
-                                    </div>
+                    </TableHeader>
+                    <TableBody>
+                        {loading ? (
+                            <TableRow>
+                                <TableCell colSpan={2} className="h-24 text-center">
+                                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
                                 </TableCell>
-                                <TableCell className="text-right font-mono text-xs text-muted-foreground">{refUser.uid}</TableCell>
                             </TableRow>
-                        ))
-                    ) : (
-                        <TableRow>
-                            <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
-                                You haven't referred any users yet. Share your link to get started!
-                            </TableCell>
-                        </TableRow>
-                    )}
-                </TableBody>
-            </Table>
-        </CardContent>
-      </Card>
-      
+                        ) : referredUsers.length > 0 ? (
+                            referredUsers.map((refUser) => (
+                                <TableRow key={refUser.uid}>
+                                    <TableCell>
+                                        <div className="flex items-center gap-3">
+                                            <Avatar>
+                                                <AvatarImage src={`https://avatar.vercel.sh/${refUser.email}.png`} alt={refUser.displayName} />
+                                                <AvatarFallback>{getInitials(refUser.displayName)}</AvatarFallback>
+                                            </Avatar>
+                                            <div>
+                                                <p className="font-medium">{refUser.displayName || 'N/A'}</p>
+                                                <p className="text-sm text-muted-foreground">{refUser.email}</p>
+                                            </div>
+                                        </div>
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono text-xs text-muted-foreground">{refUser.uid}</TableCell>
+                                </TableRow>
+                            ))
+                        ) : (
+                            <TableRow>
+                                <TableCell colSpan={2} className="h-24 text-center text-muted-foreground">
+                                    You haven't referred any users yet. Share your link to get started!
+                                </TableCell>
+                            </TableRow>
+                        )}
+                    </TableBody>
+                </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

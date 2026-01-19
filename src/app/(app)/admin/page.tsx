@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -9,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
-import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon } from 'lucide-react';
+import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon, Settings, LayoutDashboard, UserCog } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -21,6 +20,8 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/lib/auth';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 
 interface AppUser {
     uid: string;
@@ -465,73 +466,88 @@ export default function AdminPage() {
                 <p className="text-muted-foreground">Manage users and application data.</p>
             </div>
             
-            <div className="grid md:grid-cols-2 gap-6">
-                <TopEarnersCard />
-                <TopReferrersCard allUsers={users} loading={loading} />
-            </div>
+            <Tabs defaultValue="overview" className="w-full">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="overview"><LayoutDashboard className="mr-2 h-4 w-4"/> Overview</TabsTrigger>
+                <TabsTrigger value="users"><UserCog className="mr-2 h-4 w-4"/> User Management</TabsTrigger>
+                <TabsTrigger value="settings"><Settings className="mr-2 h-4 w-4"/> Wallet Settings</TabsTrigger>
+              </TabsList>
 
-            <WalletSettings />
-            
-            <Card>
-                <CardHeader>
-                    <CardTitle>Users</CardTitle>
-                    <CardDescription>A list of all registered users.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>User</TableHead>
-                                <TableHead>Coins</TableHead>
-                                <TableHead>Role</TableHead>
-                                <TableHead>Joined</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {loading ? (
+              <TabsContent value="overview" className="mt-6">
+                 <div className="grid md:grid-cols-2 gap-6">
+                    <TopEarnersCard />
+                    <TopReferrersCard allUsers={users} loading={loading} />
+                </div>
+              </TabsContent>
+
+              <TabsContent value="users" className="mt-6">
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Users</CardTitle>
+                        <CardDescription>A list of all registered users.</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Table>
+                            <TableHeader>
                                 <TableRow>
-                                    <TableCell colSpan={5} className="h-24 text-center">
-                                        <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-                                    </TableCell>
+                                    <TableHead>User</TableHead>
+                                    <TableHead>Coins</TableHead>
+                                    <TableHead>Role</TableHead>
+                                    <TableHead>Joined</TableHead>
+                                    <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
-                            ) : users.map((user) => (
-                                <TableRow key={user.uid}>
-                                    <TableCell>
-                                        <div className="flex items-center gap-3">
-                                            <Avatar>
-                                                <AvatarImage src={`https://avatar.vercel.sh/${user.email}.png`} alt={user.displayName} />
-                                                <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
-                                            </Avatar>
-                                            <div>
-                                                <p className="font-medium">{user.displayName || 'N/A'}</p>
-                                                <p className="text-sm text-muted-foreground">{user.email}</p>
+                            </TableHeader>
+                            <TableBody>
+                                {loading ? (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="h-24 text-center">
+                                            <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                                        </TableCell>
+                                    </TableRow>
+                                ) : users.map((user) => (
+                                    <TableRow key={user.uid}>
+                                        <TableCell>
+                                            <div className="flex items-center gap-3">
+                                                <Avatar>
+                                                    <AvatarImage src={`https://avatar.vercel.sh/${user.email}.png`} alt={user.displayName} />
+                                                    <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
+                                                </Avatar>
+                                                <div>
+                                                    <p className="font-medium">{user.displayName || 'N/A'}</p>
+                                                    <p className="text-sm text-muted-foreground">{user.email}</p>
+                                                </div>
                                             </div>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>{user.coins?.toLocaleString()}</TableCell>
-                                    <TableCell>
-                                        {user.admin ? (
-                                            <Badge>Admin</Badge>
-                                        ) : (
-                                            <Badge variant="secondary">User</Badge>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-muted-foreground">
-                                        {user.createdAt ? formatDistanceToNow(new Date(user.createdAt.seconds * 1000), { addSuffix: true }) : 'N/A'}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        <Button variant="ghost" size="sm" onClick={() => setBonusUser(user)}>
-                                            <Gift className="mr-2 h-4 w-4" />
-                                            Bonus
-                                        </Button>
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </CardContent>
-            </Card>
+                                        </TableCell>
+                                        <TableCell>{user.coins?.toLocaleString()}</TableCell>
+                                        <TableCell>
+                                            {user.admin ? (
+                                                <Badge>Admin</Badge>
+                                            ) : (
+                                                <Badge variant="secondary">User</Badge>
+                                            )}
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground">
+                                            {user.createdAt ? formatDistanceToNow(new Date(user.createdAt.seconds * 1000), { addSuffix: true }) : 'N/A'}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <Button variant="ghost" size="sm" onClick={() => setBonusUser(user)}>
+                                                <Gift className="mr-2 h-4 w-4" />
+                                                Bonus
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+              </TabsContent>
+              
+              <TabsContent value="settings" className="mt-6">
+                <WalletSettings />
+              </TabsContent>
+            </Tabs>
+            
             <BonusDialog user={bonusUser} isOpen={!!bonusUser} onClose={() => setBonusUser(null)} />
         </div>
     );

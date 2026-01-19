@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -20,7 +19,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
-import { Coins, ArrowUpCircle, ArrowDownCircle, Loader2, Users } from "lucide-react";
+import { Coins, ArrowUpCircle, ArrowDownCircle, Loader2, Users, Wallet as WalletIcon, ArrowRightLeft, ShoppingBag, History } from "lucide-react";
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, orderBy, query, doc, getDoc } from "firebase/firestore";
 import { db } from "@/firebase/init";
@@ -432,85 +431,103 @@ export default function WalletPage() {
         <p className="text-muted-foreground">Manage your coins and view your transaction history.</p>
       </div>
 
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Coin Balance</CardTitle>
-            <CardDescription>The total number of coins you own.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4 text-4xl font-bold text-primary">
-              <Coins className="h-12 w-12" />
-              <span>{user?.coins.toLocaleString() ?? 0}</span>
-            </div>
-          </CardContent>
-        </Card>
-         <Card>
-          <CardHeader>
-            <CardTitle>PKR Balance</CardTitle>
-            <CardDescription>Your balance converted to PKR.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="flex items-center gap-4 text-4xl font-bold text-accent">
-              <span className="text-2xl font-medium">PKR</span>
-              <span>{user?.pkrBalance?.toLocaleString() ?? 0}</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-      
-      <WalletActions />
-      <TransferCard />
+       <Tabs defaultValue="overview" className="w-full">
+        <TabsList className="grid w-full grid-cols-4">
+          <TabsTrigger value="overview"><WalletIcon className="mr-2 h-4 w-4" /> Overview</TabsTrigger>
+          <TabsTrigger value="transfer"><ArrowRightLeft className="mr-2 h-4 w-4" /> Transfer</TabsTrigger>
+          <TabsTrigger value="purchase"><ShoppingBag className="mr-2 h-4 w-4" /> Withdraw & Purchase</TabsTrigger>
+          <TabsTrigger value="history"><History className="mr-2 h-4 w-4" /> History</TabsTrigger>
+        </TabsList>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Transaction History</CardTitle>
-          <CardDescription>A log of your recent earnings and spending.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Description</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead className="text-right">Date</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="h-24 text-center">
-                    <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-                  </TableCell>
-                </TableRow>
-              ) : transactions.length > 0 ? (
-                transactions.map((tx) => (
-                  <TableRow key={tx.id}>
-                    <TableCell className="font-medium capitalize flex items-center gap-2">
-                      {tx.amount < 0 ? <ArrowDownCircle className="h-4 w-4 text-red-500" /> : <ArrowUpCircle className="h-4 w-4 text-green-500" />}
-                      {tx.description}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={tx.amount < 0 ? "destructive" : "secondary"}>
-                        {tx.amount > 0 ? '+' : ''}{tx.amount.toLocaleString()}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right text-muted-foreground">
-                      {tx.date ? formatDistanceToNow(new Date(tx.date.seconds * 1000), { addSuffix: true }) : 'N/A'}
-                    </TableCell>
-                  </TableRow>
-                ))
-              ) : (
-                 <TableRow>
-                  <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
-                    You have no transactions yet.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        <TabsContent value="overview" className="mt-6">
+           <div className="grid md:grid-cols-2 gap-6">
+                <Card>
+                <CardHeader>
+                    <CardTitle>Coin Balance</CardTitle>
+                    <CardDescription>The total number of coins you own.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center gap-4 text-4xl font-bold text-primary">
+                    <Coins className="h-12 w-12" />
+                    <span>{user?.coins.toLocaleString() ?? 0}</span>
+                    </div>
+                </CardContent>
+                </Card>
+                <Card>
+                <CardHeader>
+                    <CardTitle>PKR Balance</CardTitle>
+                    <CardDescription>Your balance converted to PKR.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex items-center gap-4 text-4xl font-bold text-accent">
+                    <span className="text-2xl font-medium">PKR</span>
+                    <span>{user?.pkrBalance?.toLocaleString() ?? 0}</span>
+                    </div>
+                </CardContent>
+                </Card>
+            </div>
+        </TabsContent>
+
+        <TabsContent value="transfer" className="mt-6">
+            <TransferCard />
+        </TabsContent>
+
+        <TabsContent value="purchase" className="mt-6">
+            <WalletActions />
+        </TabsContent>
+
+        <TabsContent value="history" className="mt-6">
+            <Card>
+                <CardHeader>
+                <CardTitle>Transaction History</CardTitle>
+                <CardDescription>A log of your recent earnings and spending.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                <Table>
+                    <TableHeader>
+                    <TableRow>
+                        <TableHead>Description</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead className="text-right">Date</TableHead>
+                    </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                    {loading ? (
+                        <TableRow>
+                        <TableCell colSpan={3} className="h-24 text-center">
+                            <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
+                        </TableCell>
+                        </TableRow>
+                    ) : transactions.length > 0 ? (
+                        transactions.map((tx) => (
+                        <TableRow key={tx.id}>
+                            <TableCell className="font-medium capitalize flex items-center gap-2">
+                            {tx.amount < 0 ? <ArrowDownCircle className="h-4 w-4 text-red-500" /> : <ArrowUpCircle className="h-4 w-4 text-green-500" />}
+                            {tx.description}
+                            </TableCell>
+                            <TableCell>
+                            <Badge variant={tx.amount < 0 ? "destructive" : "secondary"}>
+                                {tx.amount > 0 ? '+' : ''}{tx.amount.toLocaleString()}
+                            </Badge>
+                            </TableCell>
+                            <TableCell className="text-right text-muted-foreground">
+                            {tx.date ? formatDistanceToNow(new Date(tx.date.seconds * 1000), { addSuffix: true }) : 'N/A'}
+                            </TableCell>
+                        </TableRow>
+                        ))
+                    ) : (
+                        <TableRow>
+                        <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
+                            You have no transactions yet.
+                        </TableCell>
+                        </TableRow>
+                    )}
+                    </TableBody>
+                </Table>
+                </CardContent>
+            </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
