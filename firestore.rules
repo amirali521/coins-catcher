@@ -95,8 +95,9 @@ service cloud.firestore {
 
       match /messages/{messageId} {
         allow read, list: if request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
-        // On create, check the state of the parent chat doc AFTER the transaction.
-        allow create: if request.resource.data.senderId == request.auth.uid && request.auth.uid in getAfter(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        // On create, check the state of the parent chat doc.
+        // This works with the updated client code that creates the chat doc first.
+        allow create: if request.resource.data.senderId == request.auth.uid && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
         allow update, delete: if false;
       }
     }
