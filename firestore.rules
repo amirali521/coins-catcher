@@ -9,7 +9,9 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+      // Check for auth and existence before getting data to prevent errors.
+      return request.auth != null &&
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.admin == true;
     }
     
@@ -19,42 +21,37 @@ service cloud.firestore {
     }
     
     match /users/{userId} {
-      // Allow any authenticated user to read any profile for transfers.
       allow read: if request.auth != null;
-      
-      // Any authenticated user can query the collection.
-      // This is required for referral code lookup and the admin user list.
       allow list: if request.auth != null;
 
-      // Users can create their own profile on signup.
-      // They cannot make themselves an admin and must start with the default coin amount.
       allow create: if isOwner(userId)
                     && request.resource.data.admin == false
                     && request.resource.data.coins == 200;
       
-      // Users can update their own document, but cannot change their admin status.
-      // Admins can update 'blocked' status.
-      // Any user can update another user's 'coins' field (for transfers).
-      allow update: if (
-                      isOwner(userId) &&
-                      request.resource.data.admin == resource.data.admin &&
-                      request.resource.data.blocked == resource.data.blocked
-                    ) || (
-                      request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins'])
-                    ) || (
-                      isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked'])
-                    );
+      // This rule defines who can update a user's document.
+      allow update: if
+        // SCENARIO 1: A user is updating their OWN profile (e.g., claiming rewards, changing settings).
+        ( isOwner(userId)
+          // They are not allowed to change their admin status or unblock themselves.
+          && request.resource.data.admin == resource.data.admin
+          && request.resource.data.blocked == resource.data.blocked
+        )
+        // SCENARIO 2: ANOTHER user is updating this user's profile.
+        || ( !isOwner(userId) && (
+            // This is for receiving a transfer. Only the 'coins' field can be changed.
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins'])
+            // OR, an admin is blocking/unblocking the user. Only 'blocked' can change.
+            || (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked']))
+          )
+        );
 
 
-      // Nobody can delete user documents.
       allow delete: if false;
 
       match /transactions/{transactionId} {
-        // Users can read/list their own transactions.
         allow read, list: if isOwner(userId);
         
-        // A user can create their own transaction log.
-        // Another user can create a transaction log for them ONLY if it's a credit (amount > 0).
+        // Allow creating a transaction for oneself, or for another user if it's a credit.
         allow create: if isOwner(userId) || request.resource.data.amount > 0;
         
         // Transactions are immutable.
