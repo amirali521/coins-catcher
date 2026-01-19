@@ -81,9 +81,8 @@ export function ChatDialog({ friend, onClose }: { friend: Friend; onClose: () =>
         const currentMessage = newMessage;
         setNewMessage('');
 
-        const batch = writeBatch(db);
         const chatRef = doc(db, 'chats', chatId);
-        const newMessageRef = doc(collection(db, 'chats', chatId, 'messages'));
+        const messagesRef = collection(db, 'chats', chatId, 'messages');
 
         try {
             const chatDoc = await getDoc(chatRef);
@@ -94,31 +93,31 @@ export function ChatDialog({ friend, onClose }: { friend: Friend; onClose: () =>
                 timestamp: serverTimestamp(),
             };
 
+            // Step 1: Ensure chat document exists and is updated.
             if (!chatDoc.exists()) {
-                 const currentUserDetails = { displayName: user.displayName, email: user.email };
-                 const friendUserDetails = { displayName: friend.displayName, email: friend.email };
-                 batch.set(chatRef, {
+                const currentUserDetails = { displayName: user.displayName, email: user.email };
+                const friendUserDetails = { displayName: friend.displayName, email: friend.email };
+                await setDoc(chatRef, {
                     participants: [user.uid, friend.uid],
                     participantDetails: {
                         [user.uid]: currentUserDetails,
                         [friend.uid]: friendUserDetails,
                     },
-                    lastMessage: lastMessageData
+                    lastMessage: lastMessageData,
                 });
             } else {
-                 batch.update(chatRef, {
-                    lastMessage: lastMessageData
+                await updateDoc(chatRef, {
+                    lastMessage: lastMessageData,
                 });
             }
 
-            batch.set(newMessageRef, {
+            // Step 2: Now that the chat document is guaranteed to exist, add the message.
+            await addDoc(messagesRef, {
                 chatId,
                 senderId: user.uid,
                 text: currentMessage,
                 timestamp: serverTimestamp(),
             });
-            
-            await batch.commit();
 
         } catch (error) {
             console.error("Error sending message:", error);
