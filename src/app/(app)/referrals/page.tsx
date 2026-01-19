@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Copy, Gift, Users, Loader2 } from "lucide-react";
-import { collection, query, where, onSnapshot, orderBy } from "firebase/firestore";
+import { collection, query, where, onSnapshot } from "firebase/firestore";
 import { db } from "@/firebase/init";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -24,6 +24,7 @@ interface ReferredUser {
     uid: string;
     displayName: string;
     email: string;
+    createdAt: { seconds: number; nanoseconds: number; } | null;
 }
 
 export default function ReferralsPage() {
@@ -37,10 +38,11 @@ export default function ReferralsPage() {
   useEffect(() => {
     if (!user?.uid) return;
 
+    // Removed orderBy from the query to prevent the index error.
+    // Sorting is now handled on the client-side.
     const q = query(
         collection(db, "users"), 
-        where("referredBy", "==", user.uid),
-        orderBy("createdAt", "desc")
+        where("referredBy", "==", user.uid)
     );
     
     const unsubscribe = onSnapshot(q, (querySnapshot) => {
@@ -51,8 +53,13 @@ export default function ReferralsPage() {
                 uid: doc.id,
                 displayName: data.displayName,
                 email: data.email,
+                createdAt: data.createdAt || null,
             });
         });
+        
+        // Sort users by creation date, most recent first
+        users.sort((a, b) => (b.createdAt?.seconds ?? 0) - (a.createdAt?.seconds ?? 0));
+
         setReferredUsers(users);
         setLoading(false);
     }, (error) => {
