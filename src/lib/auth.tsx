@@ -32,7 +32,6 @@ interface User {
   dailyStreakCount: number;
   lastDailyClaim: { seconds: number; nanoseconds: number; } | null;
   lastFaucetClaimTimestamp?: { seconds: number; nanoseconds: number; } | null;
-  lastSeen: { seconds: number; nanoseconds: number; } | null;
   pubgId?: string;
   pubgName?: string;
   freefireId?: string;
@@ -60,7 +59,6 @@ interface AuthContextType {
   giveBonus: (userId: string, amount: number, reason: string) => Promise<void>;
   updateWithdrawalDetails: (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'jazzcashName' | 'easypaisaNumber' | 'easypaisaName'>>) => Promise<void>;
   transferFunds: (recipientId: string, amount: number, currency: 'coins' | 'pkr') => Promise<void>;
-  updatePresence: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -128,7 +126,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               dailyStreakCount: userData.dailyStreakCount || 0,
               lastDailyClaim: userData.lastDailyClaim || null,
               lastFaucetClaimTimestamp: userData.lastFaucetClaimTimestamp || null,
-              lastSeen: userData.lastSeen || null,
               pubgId: userData.pubgId,
               pubgName: userData.pubgName,
               freefireId: userData.freefireId,
@@ -224,7 +221,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         dailyStreakCount: 0,
         lastDailyClaim: null,
         lastFaucetClaimTimestamp: null,
-        lastSeen: serverTimestamp(),
       });
       await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
     }
@@ -276,7 +272,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       dailyStreakCount: 0,
       lastDailyClaim: null,
       lastFaucetClaimTimestamp: null,
-      lastSeen: serverTimestamp(),
     });
     await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
 
@@ -489,18 +484,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await updateDoc(userRef, details);
   }, [user]);
 
-  const updatePresence = useCallback(async () => {
-    if (auth.currentUser) {
-        const userRef = doc(db, 'users', auth.currentUser.uid);
-        try {
-            await updateDoc(userRef, { lastSeen: serverTimestamp() });
-        } catch (error) {
-            console.warn("Could not update presence:", error);
-        }
-    }
-  }, []);
-
-  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds, updatePresence };
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds };
 
   return (
     <AuthContext.Provider value={value}>

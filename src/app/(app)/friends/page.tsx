@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -20,7 +21,6 @@ interface AppUser {
     email: string;
     coins: number;
     admin: boolean;
-    lastSeen: { seconds: number; nanoseconds: number; } | null;
 }
 
 // Friend request structure from Firestore
@@ -99,22 +99,7 @@ function MyFriendsTab({ friends, loading }: { friends: UserWithFriendship[], loa
     }
     
     const sortedFriends = useMemo(() => {
-        const onlineFriends: UserWithFriendship[] = [];
-        const offlineFriends: UserWithFriendship[] = [];
-
-        friends.forEach(friend => {
-            const isOnline = friend.lastSeen && (new Date().getTime() - new Date(friend.lastSeen.seconds * 1000).getTime()) < 5 * 60 * 1000;
-            if (isOnline) {
-                onlineFriends.push(friend);
-            } else {
-                offlineFriends.push(friend);
-            }
-        });
-        
-        onlineFriends.sort((a, b) => a.displayName.localeCompare(b.displayName));
-        offlineFriends.sort((a, b) => a.displayName.localeCompare(b.displayName));
-
-        return [...onlineFriends, ...offlineFriends];
+        return [...friends].sort((a, b) => a.displayName.localeCompare(b.displayName));
     }, [friends]);
 
     return (
@@ -122,7 +107,7 @@ function MyFriendsTab({ friends, loading }: { friends: UserWithFriendship[], loa
             <Card>
                 <CardHeader>
                     <CardTitle>My Friends ({friends.length})</CardTitle>
-                    <CardDescription>Your connections on the platform. Sorted by online status.</CardDescription>
+                    <CardDescription>Your connections on the platform.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     {loading ? (
@@ -132,16 +117,14 @@ function MyFriendsTab({ friends, loading }: { friends: UserWithFriendship[], loa
                     ) : (
                         <ul className="space-y-3">
                             {sortedFriends.map(friend => {
-                                const isOnline = friend.lastSeen && (new Date().getTime() - new Date(friend.lastSeen.seconds * 1000).getTime()) < 5 * 60 * 1000;
                                 return (
                                 <li key={friend.uid} className="flex items-center justify-between gap-4 p-2 rounded-lg hover:bg-muted/50">
                                 <div className="flex items-center gap-3">
-                                        <div className="relative">
+                                        <div>
                                             <Avatar className="h-10 w-10">
                                                 <AvatarImage src={`https://avatar.vercel.sh/${friend.email}.png`} />
                                                 <AvatarFallback>{friend.displayName?.charAt(0) ?? 'U'}</AvatarFallback>
                                             </Avatar>
-                                            {isOnline && <div className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-green-500 border-2 border-card" />}
                                         </div>
                                         <div>
                                             <p className="font-medium">{friend.displayName}</p>
