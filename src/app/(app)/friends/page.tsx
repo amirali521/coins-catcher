@@ -309,32 +309,38 @@ export default function FriendsPage() {
     const { user } = useAuth();
     const [allUsers, setAllUsers] = useState<AppUser[]>([]);
     const [friendRequests, setFriendRequests] = useState<FriendRequest[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [usersLoading, setUsersLoading] = useState(true);
+    const [requestsLoading, setRequestsLoading] = useState(true);
+    const loading = usersLoading || requestsLoading;
 
     // Listener for all users
     useEffect(() => {
         const q = query(collection(db, 'users'), orderBy('displayName'));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const usersData = snapshot.docs.map(doc => doc.data() as AppUser);
+            const usersData = snapshot.docs.map(doc => ({ ...doc.data(), uid: doc.id } as AppUser));
             setAllUsers(usersData);
+            setUsersLoading(false);
         }, (error) => {
             console.error("Error fetching users:", error);
+            setUsersLoading(false);
         });
         return () => unsubscribe();
     }, []);
 
     // Listener for all friend requests involving the current user
     useEffect(() => {
-        if (!user?.uid) return;
-        setLoading(true);
+        if (!user?.uid) {
+            setRequestsLoading(false);
+            return;
+        }
         const q = query(collection(db, 'friendRequests'), where('participants', 'array-contains', user.uid));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const requestsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as FriendRequest));
             setFriendRequests(requestsData);
-            setLoading(false);
+            setRequestsLoading(false);
         }, (error) => {
             console.error("Error fetching friend requests:", error);
-            setLoading(false);
+            setRequestsLoading(false);
         });
         return () => unsubscribe();
     }, [user]);
@@ -385,7 +391,7 @@ export default function FriendsPage() {
                 <p className="text-muted-foreground">Manage your connections and find new people.</p>
             </div>
              <Tabs defaultValue="friends" className="w-full">
-                <TabsList className="flex h-auto w-full flex-wrap justify-start">
+                <TabsList className="flex h-auto w-full flex-wrap justify-center">
                     <TabsTrigger value="friends">My Friends</TabsTrigger>
                     <TabsTrigger value="requests">Requests ({incomingRequests.length})</TabsTrigger>
                     <TabsTrigger value="find">Find People</TabsTrigger>
