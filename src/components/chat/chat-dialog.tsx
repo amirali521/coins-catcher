@@ -82,9 +82,10 @@ export function ChatDialog({ friend, onClose }: { friend: Friend; onClose: () =>
         setNewMessage('');
 
         const chatRef = doc(db, 'chats', chatId);
-        const messagesRef = collection(db, 'chats', chatId, 'messages');
+        const newMessageRef = doc(collection(db, 'chats', chatId, 'messages'));
 
         try {
+            const batch = writeBatch(db);
             const chatDoc = await getDoc(chatRef);
 
             const lastMessageData = {
@@ -93,11 +94,11 @@ export function ChatDialog({ friend, onClose }: { friend: Friend; onClose: () =>
                 timestamp: serverTimestamp(),
             };
 
-            // Step 1: Ensure chat document exists and is updated.
+            // Stage the chat document creation/update in the batch.
             if (!chatDoc.exists()) {
                 const currentUserDetails = { displayName: user.displayName, email: user.email };
                 const friendUserDetails = { displayName: friend.displayName, email: friend.email };
-                await setDoc(chatRef, {
+                batch.set(chatRef, {
                     participants: [user.uid, friend.uid],
                     participantDetails: {
                         [user.uid]: currentUserDetails,
@@ -106,18 +107,21 @@ export function ChatDialog({ friend, onClose }: { friend: Friend; onClose: () =>
                     lastMessage: lastMessageData,
                 });
             } else {
-                await updateDoc(chatRef, {
+                batch.update(chatRef, {
                     lastMessage: lastMessageData,
                 });
             }
 
-            // Step 2: Now that the chat document is guaranteed to exist, add the message.
-            await addDoc(messagesRef, {
+            // Stage the new message creation in the batch.
+            batch.set(newMessageRef, {
                 chatId,
                 senderId: user.uid,
                 text: currentMessage,
                 timestamp: serverTimestamp(),
             });
+
+            // Commit the batch atomically.
+            await batch.commit();
 
         } catch (error) {
             console.error("Error sending message:", error);
