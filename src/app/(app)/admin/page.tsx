@@ -3,7 +3,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase/init';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -444,22 +444,30 @@ export default function AdminPage() {
     const { toast } = useToast();
 
     useEffect(() => {
-        const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
-        
-        const unsubscribe = onSnapshot(usersQuery, (querySnapshot) => {
-            const usersData: AppUser[] = [];
-            querySnapshot.forEach((doc) => {
-                usersData.push({ ...doc.data(), uid: doc.id } as AppUser);
-            });
-            setUsers(usersData);
-            setLoading(false);
-        }, (error) => {
-            console.error("Error with real-time user listener:", error);
-             setLoading(false);
-        });
+        const fetchUsers = async () => {
+            setLoading(true);
+            try {
+                const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+                const querySnapshot = await getDocs(usersQuery);
+                const usersData: AppUser[] = [];
+                querySnapshot.forEach((doc) => {
+                    usersData.push({ ...doc.data(), uid: doc.id } as AppUser);
+                });
+                setUsers(usersData);
+            } catch (error) {
+                console.error("Error fetching users:", error);
+                toast({
+                    variant: "destructive",
+                    title: "Failed to load users",
+                    description: "There was an error fetching the user list.",
+                });
+            } finally {
+                setLoading(false);
+            }
+        };
 
-        return () => unsubscribe();
-    }, []);
+        fetchUsers();
+    }, [toast]);
 
     const getInitials = (name: string | null) => {
         if (!name) return "U";
@@ -473,6 +481,8 @@ export default function AdminPage() {
                 title: `User ${!user.blocked ? 'Blocked' : 'Unblocked'}`,
                 description: `${user.displayName} has been ${!user.blocked ? 'blocked' : 'unblocked'}.`,
             });
+            // Manually update the user state to reflect the change
+            setUsers(prevUsers => prevUsers.map(u => u.uid === user.uid ? { ...u, blocked: !u.blocked } : u));
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Error', description: error.message });
         }
@@ -579,3 +589,5 @@ export default function AdminPage() {
         </div>
     );
 }
+
+    
