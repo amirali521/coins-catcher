@@ -37,7 +37,9 @@ interface User {
   freefireId?: string;
   freefireName?: string;
   jazzcashNumber?: string;
+  jazzcashName?: string;
   easypaisaNumber?: string;
+  easypaisaName?: string;
 }
 
 interface AuthContextType {
@@ -55,7 +57,7 @@ interface AuthContextType {
   claimDailyReward: () => Promise<{ amount: number; newStreak: number }>;
   withdrawPkr: (pkrAmount: number, description: string) => Promise<void>;
   giveBonus: (userId: string, amount: number, reason: string) => Promise<void>;
-  updateWithdrawalDetails: (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'easypaisaNumber'>>) => Promise<void>;
+  updateWithdrawalDetails: (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'jazzcashName' | 'easypaisaNumber' | 'easypaisaName'>>) => Promise<void>;
   transferFunds: (recipientId: string, amount: number, currency: 'coins' | 'pkr') => Promise<void>;
 }
 
@@ -133,7 +135,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               freefireId: userData.freefireId,
               freefireName: userData.freefireName,
               jazzcashNumber: userData.jazzcashNumber,
+              jazzcashName: userData.jazzcashName,
               easypaisaNumber: userData.easypaisaNumber,
+              easypaisaName: userData.easypaisaName,
             });
              setLoading(false);
           } else if (!docSnap.exists()){
@@ -494,7 +498,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
   };
 
-  const updateWithdrawalDetails = async (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'easypaisaNumber'>>) => {
+  const updateWithdrawalDetails = async (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'jazzcashName' | 'easypaisaNumber' | 'easypaisaName'>>) => {
     if (!user) throw new Error("User not authenticated.");
     const userRef = doc(db, 'users', user.uid);
     await updateDoc(userRef, details);
@@ -516,7 +520,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-    
-
-    
