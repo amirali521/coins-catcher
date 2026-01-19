@@ -12,7 +12,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { Loader2, UserPlus, Users, Check, X, Search, MessageCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { ChatDialog } from '@/components/chat/chat-dialog';
+import { useRouter } from 'next/navigation';
 
 // Raw user data from Firestore
 interface AppUser {
@@ -86,7 +86,7 @@ const unfriend = async (requestId: string) => {
 
 function MyFriendsTab({ friends, loading }: { friends: UserWithFriendship[], loading: boolean }) {
     const { toast } = useToast();
-    const [chattingWith, setChattingWith] = useState<UserWithFriendship | null>(null);
+    const router = useRouter();
 
     const handleUnfriend = async (request: UserWithFriendship) => {
         if (!request.requestId) return;
@@ -132,7 +132,7 @@ function MyFriendsTab({ friends, loading }: { friends: UserWithFriendship[], loa
                                         </div>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <Button variant="secondary" onClick={() => setChattingWith(friend)}>
+                                    <Button variant="secondary" onClick={() => router.push(`/chat?friend=${friend.uid}`)}>
                                         <MessageCircle className="mr-2 h-4 w-4"/> Chat
                                     </Button>
                                     <Button variant="ghost" size="sm" onClick={() => handleUnfriend(friend)}>Unfriend</Button>
@@ -143,12 +143,6 @@ function MyFriendsTab({ friends, loading }: { friends: UserWithFriendship[], loa
                     )}
                 </CardContent>
             </Card>
-             {chattingWith && (
-                <ChatDialog 
-                    friend={chattingWith} 
-                    onClose={() => setChattingWith(null)} 
-                />
-            )}
         </>
     );
 }

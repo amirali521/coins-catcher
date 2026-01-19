@@ -8,13 +8,14 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { Gift, Settings, Users, Wallet, Shield, UserPlus } from 'lucide-react';
+import { Gift, Settings, Users, Wallet, Shield, UserPlus, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 
 const links = [
   { href: '/dashboard', label: 'Dashboard', icon: Gift },
   { href: '/wallet', label: 'Wallet', icon: Wallet },
   { href: '/friends', label: 'Friends', icon: Users },
+  { href: '/chat', label: 'Chat', icon: MessageCircle },
   { href: '/referrals', label: 'Referrals', icon: UserPlus },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];

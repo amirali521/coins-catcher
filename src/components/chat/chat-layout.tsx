@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -17,6 +18,7 @@ import {
   orderBy,
   updateDoc,
   getDocs,
+  writeBatch,
 } from 'firebase/firestore';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Input } from '@/components/ui/input';
@@ -75,7 +77,7 @@ function ChatWindow({ chat, friend, onBack }: { chat: Chat | null, friend: Frien
             const msgs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Message));
             setMessages(msgs);
             setLoading(false);
-        });
+        }, () => setLoading(false));
 
         return () => unsubscribe();
     }, [chatId]);
@@ -83,7 +85,7 @@ function ChatWindow({ chat, friend, onBack }: { chat: Chat | null, friend: Frien
     useEffect(() => {
         // Auto-scroll to bottom
         if (scrollAreaRef.current) {
-            scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight });
+            scrollAreaRef.current.scrollTo({ top: scrollAreaRef.current.scrollHeight, behavior: 'smooth' });
         }
     }, [messages]);
 
@@ -96,43 +98,46 @@ function ChatWindow({ chat, friend, onBack }: { chat: Chat | null, friend: Frien
         setNewMessage('');
 
         const chatRef = doc(db, 'chats', chatId);
-        const messagesRef = collection(db, 'chats', chatId, 'messages');
+        const newMessageRef = doc(collection(db, `chats/${chatId}/messages`));
 
         try {
-            // If the chat doesn't exist yet, create it
-            if (!chat) {
+            const batch = writeBatch(db);
+            const chatDoc = await getDoc(chatRef);
+
+            const lastMessageData = {
+                text: currentMessage,
+                senderId: user.uid,
+                timestamp: serverTimestamp(),
+            };
+
+            if (!chatDoc.exists()) {
                 const currentUserDetails = { displayName: user.displayName, email: user.email };
                 const friendUserDetails = { displayName: friend.displayName, email: friend.email };
-                
-                await setDoc(chatRef, {
+                batch.set(chatRef, {
                     participants: [user.uid, friend.uid],
                     participantDetails: {
                         [user.uid]: currentUserDetails,
                         [friend.uid]: friendUserDetails,
-                    }
+                    },
+                    lastMessage: lastMessageData,
+                });
+            } else {
+                batch.update(chatRef, {
+                    lastMessage: lastMessageData,
                 });
             }
 
-            // Add the new message
-            const messageDoc = await addDoc(messagesRef, {
+            batch.set(newMessageRef, {
                 chatId,
                 senderId: user.uid,
                 text: currentMessage,
                 timestamp: serverTimestamp(),
             });
 
-            // Update the last message on the chat document
-            await updateDoc(chatRef, {
-                lastMessage: {
-                    text: currentMessage,
-                    senderId: user.uid,
-                    timestamp: new Date(), // Use client-side date for immediate update
-                }
-            });
+            await batch.commit();
 
         } catch (error) {
             console.error("Error sending message:", error);
-            // Optionally, handle the error (e.g., show a toast) and restore the message input
             setNewMessage(currentMessage);
         }
     };
@@ -149,7 +154,6 @@ function ChatWindow({ chat, friend, onBack }: { chat: Chat | null, friend: Frien
                 </Avatar>
                 <div className="flex-1">
                     <p className="font-semibold">{friend.displayName}</p>
-                    <p className="text-sm text-muted-foreground">Online</p>
                 </div>
             </CardHeader>
             <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
@@ -177,7 +181,7 @@ function ChatWindow({ chat, friend, onBack }: { chat: Chat | null, friend: Frien
                                     "max-w-xs rounded-lg px-3 py-2 md:max-w-md",
                                     msg.senderId === user?.uid ? "bg-primary text-primary-foreground" : "bg-muted"
                                 )}>
-                                    <p className="text-sm">{msg.text}</p>
+                                    <p className="text-sm break-words">{msg.text}</p>
                                 </div>
                             </div>
                         ))}
@@ -208,8 +212,6 @@ function ConversationList({ onSelectChat, activeChatId }: { onSelectChat: (frien
 
     useEffect(() => {
         if (!user) return;
-        // The orderBy was causing a composite index requirement.
-        // We'll remove it and sort on the client.
         const chatsQuery = query(
             collection(db, 'chats'), 
             where('participants', 'array-contains', user.uid)
@@ -218,7 +220,6 @@ function ConversationList({ onSelectChat, activeChatId }: { onSelectChat: (frien
         const unsubscribe = onSnapshot(chatsQuery, (snapshot) => {
             const chatData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Chat));
             
-            // Sort chats by the timestamp of the last message, newest first.
             chatData.sort((a, b) => {
                 const timeA = a.lastMessage?.timestamp?.seconds ?? 0;
                 const timeB = b.lastMessage?.timestamp?.seconds ?? 0;
@@ -317,9 +318,9 @@ export function ChatLayout() {
     const unsubFriends = onSnapshot(friendsQuery, async (snapshot) => {
         const friendIds = snapshot.docs.map(doc => doc.data().participants.find((p: string) => p !== user.uid)).filter(Boolean);
         if (friendIds.length > 0) {
-            const usersQuery = query(collection(db, 'users'), where('uid', 'in', friendIds));
+            const usersQuery = query(collection(db, 'users'), where('__name__', 'in', friendIds));
             const usersSnapshot = await getDocs(usersQuery);
-            const friendsData = usersSnapshot.docs.map(doc => doc.data() as Friend);
+            const friendsData = usersSnapshot.docs.map(doc => ({ ...doc.data(), uid: doc.id } as Friend));
             setAllFriends(friendsData);
         } else {
             setAllFriends([]);
@@ -340,13 +341,12 @@ export function ChatLayout() {
 
   // Effect to set active friend from search param
   useEffect(() => {
-    if (loading || allFriends.length === 0) return;
+    if (loading) return;
     const friendId = searchParams.get('friend');
     if (friendId) {
       const friend = allFriends.find(f => f.uid === friendId);
       if (friend) {
         setActiveFriend(friend);
-        // Clean the URL
         router.replace('/chat', { scroll: false });
       }
     }
@@ -360,7 +360,7 @@ export function ChatLayout() {
   const activeChatId = useMemo(() => (user && activeFriend) ? getChatId(user.uid, activeFriend.uid) : null, [user, activeFriend]);
   const activeChatDoc = useMemo(() => activeChatId ? allChats.find(c => c.id === activeChatId) : null, [activeChatId, allChats]);
   
-  if (loading) {
+  if (loading && !activeFriend) {
      return <Card className="flex h-full w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin text-primary" /></Card>;
   }
 
