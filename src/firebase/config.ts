@@ -1,9 +1,10 @@
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 export const firebaseConfig = {
-  apiKey: "AIzaSyCBjQaBH-hrXXaHpAP8jaIq5wEwg_jCZw8",
-  authDomain: "earning-app-1bcf0.firebaseapp.com",
-  projectId: "earning-app-1bcf0",
-  storageBucket: "earning-app-1bcf0.appspot.com",
-  messagingSenderId: "905929087956",
-  appId: "1:905929087956:web:33a118e4a84294dc6dd441",
-  measurementId: "G-PZ7B6PL2D5",
+  apiKey: "AIzaSyCJeEXd0y25PvdDk9u6iWCBHF_sFMil2S8",
+  authDomain: "coinscatcher-a6672.firebaseapp.com",
+  projectId: "coinscatcher-a6672",
+  storageBucket: "coinscatcher-a6672.appspot.com",
+  messagingSenderId: "236133198740",
+  appId: "1:236133198740:web:0681701a9130dac168fd81",
+  measurementId: "G-0S8BC6JH6H"
 };
