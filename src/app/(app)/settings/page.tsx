@@ -13,7 +13,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth";
-import { LogOut, Loader2, Save } from "lucide-react";
+import { LogOut, Loader2, Save, Copy } from "lucide-react";
 import React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -185,6 +185,17 @@ function WithdrawalSettings() {
 
 export default function SettingsPage() {
   const { user, logout } = useAuth();
+  const { toast } = useToast();
+
+  const handleCopyId = () => {
+    if (user?.uid) {
+      navigator.clipboard.writeText(user.uid);
+      toast({
+        title: "User ID Copied",
+        description: "Your user ID has been copied to your clipboard.",
+      });
+    }
+  };
 
   return (
     <div className="grid gap-6">
@@ -206,6 +217,16 @@ export default function SettingsPage() {
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input id="email" value={user?.email || ''} readOnly />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="uid">Your User ID</Label>
+            <div className="flex items-center space-x-2">
+              <Input id="uid" value={user?.uid || ''} readOnly />
+              <Button onClick={handleCopyId} size="icon" variant="outline">
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Share this ID to receive funds from other users.</p>
           </div>
         </CardContent>
       </Card>

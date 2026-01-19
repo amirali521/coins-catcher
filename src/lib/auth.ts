@@ -15,7 +15,7 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth, db } from '@/firebase/init';
-import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection, addDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection, addDoc, runTransaction } from 'firebase/firestore';
 import { isToday, isYesterday } from 'date-fns';
 
 interface User {
@@ -55,6 +55,7 @@ interface AuthContextType {
   withdrawPkr: (pkrAmount: number, description: string) => Promise<void>;
   giveBonus: (userId: string, amount: number, reason: string) => Promise<void>;
   updateWithdrawalDetails: (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'easypaisaNumber'>>) => Promise<void>;
+  transferFunds: (recipientId: string, amount: number, currency: 'coins' | 'pkr') => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -337,6 +338,70 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
     await addTransaction(user.uid, 'withdraw', -coinsToDeduct, description);
   };
+
+  const transferFunds = async (recipientId: string, amount: number, currency: 'coins' | 'pkr') => {
+    if (!user) throw new Error("User not authenticated.");
+    if (user.uid === recipientId) throw new Error("You cannot transfer funds to yourself.");
+
+    if (amount <= 0) {
+      throw new Error("Transfer amount must be positive.");
+    }
+
+    await runTransaction(db, async (transaction) => {
+      const senderRef = doc(db, 'users', user.uid);
+      const recipientRef = doc(db, 'users', recipientId);
+
+      const [senderDoc, recipientDoc] = await Promise.all([
+        transaction.get(senderRef),
+        transaction.get(recipientRef),
+      ]);
+
+      if (!senderDoc.exists()) {
+        throw new Error("Sender document not found.");
+      }
+      if (!recipientDoc.exists()) {
+        throw new Error("Recipient User ID not found.");
+      }
+      
+      const senderData = senderDoc.data();
+      const recipientData = recipientDoc.data();
+      let coinsToTransfer = 0;
+      let description = "";
+
+      if (currency === 'coins') {
+        coinsToTransfer = amount;
+        if (senderData.coins < coinsToTransfer) {
+          throw new Error("Insufficient coin balance.");
+        }
+        description = `${amount.toLocaleString()} coins`;
+      } else { // currency === 'pkr'
+        if (coinToPkrRate === null || coinToPkrRate <= 0) {
+          throw new Error("Cannot process transaction: conversion rate is invalid.");
+        }
+        const senderPkrBalance = Math.floor((senderData.coins / 100000) * coinToPkrRate);
+        if (senderPkrBalance < amount) {
+          throw new Error("Insufficient PKR balance.");
+        }
+        coinsToTransfer = Math.ceil((amount / coinToPkrRate) * 100000);
+         if (senderData.coins < coinsToTransfer) {
+          throw new Error("Insufficient coin balance for this PKR amount.");
+        }
+        description = `${amount.toLocaleString()} PKR`;
+      }
+
+      // Perform updates within the transaction
+      transaction.update(senderRef, { coins: increment(-coinsToTransfer) });
+      transaction.update(recipientRef, { coins: increment(coinsToTransfer) });
+
+      // Create transaction logs (can't use serverTimestamp in a transaction)
+      const now = new Date();
+      const senderLog = { type: 'transfer-sent', amount: -coinsToTransfer, description: `Sent ${description} to ${recipientData.displayName || recipientId}`, date: now };
+      const recipientLog = { type: 'transfer-received', amount: coinsToTransfer, description: `Received ${description} from ${senderData.displayName || user.uid}`, date: now };
+      
+      transaction.set(doc(collection(db, 'users', user.uid, 'transactions')), senderLog);
+      transaction.set(doc(collection(db, 'users', recipientId, 'transactions')), recipientLog);
+    });
+  };
   
   const sendVerificationEmail = async () => {
     if (auth.currentUser) {
@@ -370,7 +435,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await updateDoc(userRef, details);
   };
 
-  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails };
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds };
 
   return (
     <AuthContext.Provider value={value}>

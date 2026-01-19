@@ -20,7 +20,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/lib/auth";
-import { Coins, ArrowUpCircle, ArrowDownCircle, Loader2 } from "lucide-react";
+import { Coins, ArrowUpCircle, ArrowDownCircle, Loader2, Users } from "lucide-react";
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, orderBy, query, doc, getDoc } from "firebase/firestore";
 import { db } from "@/firebase/init";
@@ -32,6 +32,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 interface Transaction {
   id: string;
@@ -53,6 +54,12 @@ interface WalletSettings {
 
 const withdrawalFormSchema = z.object({
   amount: z.coerce.number().min(100, { message: "Minimum withdrawal is 100 PKR." }),
+});
+
+const transferFormSchema = z.object({
+  recipientId: z.string().min(1, { message: "Recipient ID is required." }),
+  amount: z.coerce.number().min(1, { message: "Amount must be positive." }),
+  currency: z.enum(['coins', 'pkr'], { required_error: "You must select a currency." }),
 });
 
 
@@ -252,6 +259,137 @@ function WalletActions() {
     );
 }
 
+function TransferCard() {
+    const { user, transferFunds } = useAuth();
+    const { toast } = useToast();
+
+    const formSchema = transferFormSchema.refine((data) => {
+        if (!user) return false;
+        if (data.currency === 'coins') {
+            return data.amount <= user.coins;
+        }
+        if (data.currency === 'pkr') {
+            return data.amount <= user.pkrBalance;
+        }
+        return false;
+    }, {
+        message: "Amount exceeds your available balance.",
+        path: ["amount"],
+    });
+
+    const form = useForm<z.infer<typeof formSchema>>({
+        resolver: zodResolver(formSchema),
+        defaultValues: {
+            recipientId: "",
+            amount: 1,
+            currency: 'coins',
+        },
+    });
+
+    async function onSubmit(data: z.infer<typeof formSchema>) {
+        try {
+            await transferFunds(data.recipientId, data.amount, data.currency);
+            toast({
+                title: "Transfer Successful",
+                description: `You have successfully sent ${data.amount.toLocaleString()} ${data.currency.toUpperCase()} to ${data.recipientId}.`,
+            });
+            form.reset();
+        } catch (error: any) {
+            toast({
+                variant: "destructive",
+                title: "Transfer Failed",
+                description: error.message,
+            });
+        }
+    }
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                    <Users />
+                    Transfer Funds
+                </CardTitle>
+                <CardDescription>
+                    Send coins or PKR to another user. You will need their unique User ID.
+                </CardDescription>
+            </CardHeader>
+            <CardContent>
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                         <FormField
+                            control={form.control}
+                            name="recipientId"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Recipient's User ID</FormLabel>
+                                    <FormControl>
+                                        <Input placeholder="Enter the user's ID" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                         <div className="grid grid-cols-2 gap-4">
+                             <FormField
+                                control={form.control}
+                                name="amount"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Amount</FormLabel>
+                                        <FormControl>
+                                            <Input type="number" placeholder="100" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                             <FormField
+                                control={form.control}
+                                name="currency"
+                                render={({ field }) => (
+                                    <FormItem className="space-y-3">
+                                        <FormLabel>Currency</FormLabel>
+                                        <FormControl>
+                                            <RadioGroup
+                                            onValueChange={field.onChange}
+                                            defaultValue={field.value}
+                                            className="flex items-center space-x-4 pt-2"
+                                            >
+                                                <FormItem className="flex items-center space-x-2 space-y-0">
+                                                    <FormControl>
+                                                        <RadioGroupItem value="coins" />
+                                                    </FormControl>
+                                                    <FormLabel className="font-normal">
+                                                    Coins
+                                                    </FormLabel>
+                                                </FormItem>
+                                                <FormItem className="flex items-center space-x-2 space-y-0">
+                                                    <FormControl>
+                                                        <RadioGroupItem value="pkr" />
+                                                    </FormControl>
+                                                    <FormLabel className="font-normal">
+                                                    PKR
+                                                    </FormLabel>
+                                                </FormItem>
+                                            </RadioGroup>
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
+                         </div>
+                        <Button type="submit" disabled={form.formState.isSubmitting}>
+                            {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Send Funds
+                        </Button>
+                    </form>
+                </Form>
+            </CardContent>
+        </Card>
+    );
+}
+
 export default function WalletPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -322,7 +460,7 @@ export default function WalletPage() {
       </div>
       
       <WalletActions />
-
+      <TransferCard />
 
       <Card>
         <CardHeader>
@@ -349,11 +487,11 @@ export default function WalletPage() {
                 transactions.map((tx) => (
                   <TableRow key={tx.id}>
                     <TableCell className="font-medium capitalize flex items-center gap-2">
-                      {tx.type === 'withdraw' || tx.amount < 0 ? <ArrowDownCircle className="h-4 w-4 text-red-500" /> : <ArrowUpCircle className="h-4 w-4 text-green-500" />}
+                      {tx.amount < 0 ? <ArrowDownCircle className="h-4 w-4 text-red-500" /> : <ArrowUpCircle className="h-4 w-4 text-green-500" />}
                       {tx.description}
                     </TableCell>
                     <TableCell>
-                      <Badge variant={tx.type === 'withdraw' || tx.amount < 0 ? "destructive" : "secondary"}>
+                      <Badge variant={tx.amount < 0 ? "destructive" : "secondary"}>
                         {tx.amount > 0 ? '+' : ''}{tx.amount.toLocaleString()}
                       </Badge>
                     </TableCell>
