@@ -78,5 +78,20 @@ service cloud.firestore {
       // A participant can delete a declined or accepted request (unfriend)
       allow delete: if isParticipant() && resource.data.status != 'pending';
     }
+
+    match /chats/{chatId} {
+      function isChatParticipant() {
+        return request.auth.uid in resource.data.participants;
+      }
+      
+      allow read, update: if isChatParticipant();
+      allow create: if request.auth.uid in request.resource.data.participants;
+
+      match /messages/{messageId} {
+        allow read, list: if request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if request.resource.data.senderId == request.auth.uid && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow update, delete: if false;
+      }
+    }
   }
 }

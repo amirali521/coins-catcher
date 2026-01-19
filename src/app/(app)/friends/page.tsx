@@ -1,7 +1,7 @@
-
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/lib/auth';
 import { db } from '@/firebase/init';
 import { collection, query, where, onSnapshot, addDoc, doc, updateDoc, deleteDoc, getDocs, serverTimestamp, orderBy } from 'firebase/firestore';
@@ -122,7 +122,9 @@ function MyFriendsTab({ friends, loading }: { friends: UserWithFriendship[], loa
                                     </div>
                                </div>
                                <div className="flex items-center gap-2">
-                                   <Button variant="secondary" disabled>Chat</Button>
+                                   <Button variant="secondary" asChild>
+                                      <Link href={`/chat?friend=${friend.uid}`}>Chat</Link>
+                                   </Button>
                                    <Button variant="ghost" size="sm" onClick={() => handleUnfriend(friend)}>Unfriend</Button>
                                </div>
                             </li>
