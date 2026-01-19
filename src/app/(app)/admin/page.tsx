@@ -790,7 +790,7 @@ export default function AdminPage() {
             </div>
             
             <Tabs defaultValue="overview" className="w-full">
-              <TabsList className="grid w-full grid-cols-4">
+              <TabsList className="flex h-auto w-full flex-wrap justify-start">
                 <TabsTrigger value="overview"><LayoutDashboard className="mr-2 h-4 w-4"/> Overview</TabsTrigger>
                 <TabsTrigger value="users"><UserCog className="mr-2 h-4 w-4"/> User Management</TabsTrigger>
                 <TabsTrigger value="withdrawals"><Banknote className="mr-2 h-4 w-4" /> Withdrawal Requests</TabsTrigger>
