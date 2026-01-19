@@ -442,50 +442,62 @@ export default function AdminPage() {
     const [bonusUser, setBonusUser] = useState<AppUser | null>(null);
     const router = useRouter();
     const [activityCounts, setActivityCounts] = useState<Record<string, number>>({});
-    const countsFetched = useRef(false);
 
     useEffect(() => {
-        const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
-        const unsubscribe = onSnapshot(q, (querySnapshot) => {
+        const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+        
+        // Fetch initial user data and activity counts once.
+        const fetchInitialData = async () => {
+            try {
+                const querySnapshot = await getDocs(usersQuery);
+                const usersData: AppUser[] = [];
+                querySnapshot.forEach((doc) => {
+                    usersData.push({ ...doc.data(), uid: doc.id } as AppUser);
+                });
+                
+                setUsers(usersData);
+                
+                // Fetch activity counts for the initial user list
+                const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+                const countPromises = usersData.map(user => 
+                    getDocs(query(
+                        collection(db, 'users', user.uid, 'activity'),
+                        where('timestamp', '>=', twentyFourHoursAgo),
+                        where('type', '==', 'login')
+                    )).then(snapshot => ({ uid: user.uid, count: snapshot.size }))
+                );
+                
+                const results = await Promise.all(countPromises);
+                const newCounts = results.reduce((acc, result) => {
+                    acc[result.uid] = result.count;
+                    return acc;
+                }, {} as Record<string, number>);
+                setActivityCounts(newCounts);
+
+            } catch (error) {
+                console.error("Error fetching initial data:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchInitialData();
+
+        // Set up a real-time listener for the user list ONLY.
+        // This will keep the user list (coins, names, etc.) up-to-date
+        // without re-triggering the expensive activity count query.
+        const unsubscribe = onSnapshot(usersQuery, (querySnapshot) => {
             const usersData: AppUser[] = [];
             querySnapshot.forEach((doc) => {
                 usersData.push({ ...doc.data(), uid: doc.id } as AppUser);
             });
             setUsers(usersData);
-            setLoading(false);
         }, (error) => {
-            console.error("Error fetching users:", error);
-            setLoading(false);
+            console.error("Error with real-time user listener:", error);
         });
 
         return () => unsubscribe();
-    }, []);
-
-    useEffect(() => {
-        // Don't run if users aren't loaded, or if counts have already been fetched.
-        if (loading || users.length === 0 || countsFetched.current) {
-            return;
-        }
-
-        countsFetched.current = true; // Set flag to prevent re-fetching
-        const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-        const promises = users.map(user => 
-            getDocs(query(
-                collection(db, 'users', user.uid, 'activity'),
-                where('timestamp', '>=', twentyFourHoursAgo),
-                where('type', '==', 'login')
-            )).then(snapshot => ({ uid: user.uid, count: snapshot.size }))
-        );
-        
-        Promise.all(promises).then(results => {
-            const newCounts = results.reduce((acc, result) => {
-                acc[result.uid] = result.count;
-                return acc;
-            }, {} as Record<string, number>);
-            setActivityCounts(newCounts);
-        });
-    }, [users, loading]);
+    }, []); // Empty dependency array ensures this runs only once on mount.
 
     const getInitials = (name: string | null) => {
         if (!name) return "U";
@@ -592,5 +604,3 @@ export default function AdminPage() {
         </div>
     );
 }
-
-    
