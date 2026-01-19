@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { collection, query, orderBy, doc, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, query, orderBy, doc, getDoc, getDocs, onSnapshot, limit, setDoc } from 'firebase/firestore';
 import { db } from '@/firebase/init';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
