@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
@@ -14,6 +15,7 @@ import {
   orderBy,
   updateDoc,
   getDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -79,37 +81,44 @@ export function ChatDialog({ friend, onClose }: { friend: Friend; onClose: () =>
         const currentMessage = newMessage;
         setNewMessage('');
 
+        const batch = writeBatch(db);
         const chatRef = doc(db, 'chats', chatId);
-        const messagesRef = collection(db, 'chats', chatId, 'messages');
+        const newMessageRef = doc(collection(db, 'chats', chatId, 'messages'));
 
         try {
             const chatDoc = await getDoc(chatRef);
+
+            const lastMessageData = {
+                text: currentMessage,
+                senderId: user.uid,
+                timestamp: serverTimestamp(),
+            };
+
             if (!chatDoc.exists()) {
                  const currentUserDetails = { displayName: user.displayName, email: user.email };
                  const friendUserDetails = { displayName: friend.displayName, email: friend.email };
-                 await setDoc(chatRef, {
+                 batch.set(chatRef, {
                     participants: [user.uid, friend.uid],
                     participantDetails: {
                         [user.uid]: currentUserDetails,
                         [friend.uid]: friendUserDetails,
-                    }
+                    },
+                    lastMessage: lastMessageData
+                });
+            } else {
+                 batch.update(chatRef, {
+                    lastMessage: lastMessageData
                 });
             }
 
-            await addDoc(messagesRef, {
+            batch.set(newMessageRef, {
                 chatId,
                 senderId: user.uid,
                 text: currentMessage,
                 timestamp: serverTimestamp(),
             });
-
-            await updateDoc(chatRef, {
-                lastMessage: {
-                    text: currentMessage,
-                    senderId: user.uid,
-                    timestamp: new Date(), 
-                }
-            });
+            
+            await batch.commit();
 
         } catch (error) {
             console.error("Error sending message:", error);
