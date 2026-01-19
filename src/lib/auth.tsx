@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import {
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -165,7 +165,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [coinToPkrRate, toast]);
 
 
-  const login = async (email: string, password?: string) => {
+  const login = useCallback(async (email: string, password?: string) => {
     if (!password) throw new Error("Password is required for email/password login.");
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
 
@@ -176,9 +176,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       error.code = "auth/email-not-verified";
       throw error;
     }
-  };
+  }, []);
   
-  const signInWithGoogle = async (referralCode?: string | null) => {
+  const signInWithGoogle = useCallback(async (referralCode?: string | null) => {
     const provider = new GoogleAuthProvider();
     const userCredential = await signInWithPopup(auth, provider);
     const fbUser = userCredential.user;
@@ -229,9 +229,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
     }
     return { referred };
-  };
+  }, []);
 
-  const signup = async (name: string, email: string, password?: string, referralCode?: string | null) => {
+  const signup = useCallback(async (name: string, email: string, password?: string, referralCode?: string | null) => {
     if (!password) throw new Error("Password is required for email/password signup.");
     
     const usersRef = collection(db, 'users');
@@ -282,9 +282,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     await sendEmailVerification(fbUser);
     return { referred };
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     try {
       await firebaseSignOut(auth);
     } catch (error: any) {
@@ -294,9 +294,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             description: error.message.replace('Firebase: ', ''),
         });
     }
-  };
+  }, [toast]);
 
-  const claimHourlyReward = async (amount: number) => {
+  const claimHourlyReward = useCallback(async (amount: number) => {
     if (user) {
       const userRef = doc(db, 'users', user.uid);
       await updateDoc(userRef, {
@@ -305,9 +305,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       await addTransaction(user.uid, 'claim', amount, 'Hourly reward');
     }
-  };
+  }, [user]);
 
-  const claimFaucetReward = async (amount: number) => {
+  const claimFaucetReward = useCallback(async (amount: number) => {
     if (user) {
       const userRef = doc(db, 'users', user.uid);
       await updateDoc(userRef, {
@@ -316,11 +316,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       await addTransaction(user.uid, 'faucet', amount, 'Faucet reward');
     }
-  };
+  }, [user]);
 
   const DAILY_REWARDS = [15, 30, 45, 60, 75, 90, 120];
 
-  const claimDailyReward = async () => {
+  const claimDailyReward = useCallback(async () => {
     if (!user) throw new Error("User not authenticated");
 
     const userRef = doc(db, 'users', user.uid);
@@ -353,9 +353,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await addTransaction(user.uid, 'daily-reward', rewardAmount, `Day ${currentStreak} streak bonus`);
     
     return { amount: rewardAmount, newStreak: currentStreak };
-  };
+  }, [user]);
 
-  const withdrawPkr = async (pkrAmount: number, description: string) => {
+  const withdrawPkr = useCallback(async (pkrAmount: number, description: string) => {
     if (!user) throw new Error("User not authenticated");
     if (user.pkrBalance < pkrAmount) throw new Error("Insufficient PKR balance");
     if (coinToPkrRate === null || coinToPkrRate <= 0) {
@@ -373,9 +373,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       coins: increment(-coinsToDeduct),
     });
     await addTransaction(user.uid, 'withdraw', -coinsToDeduct, description);
-  };
+  }, [user, coinToPkrRate]);
 
-  const transferFunds = async (recipientId: string, amount: number, currency: 'coins' | 'pkr') => {
+  const transferFunds = useCallback(async (recipientId: string, amount: number, currency: 'coins' | 'pkr') => {
     if (!user) throw new Error("User not authenticated.");
     if (user.uid === recipientId) throw new Error("You cannot transfer funds to yourself.");
 
@@ -439,21 +439,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch(e: any) {
         throw new Error(e.message || "Transfer failed. Please try again.");
     }
-  };
+  }, [user, coinToPkrRate]);
   
-  const sendVerificationEmail = async () => {
+  const sendVerificationEmail = useCallback(async () => {
     if (auth.currentUser) {
       await sendEmailVerification(auth.currentUser);
     } else {
       throw new Error("No user is currently signed in to send a verification email.");
     }
-  };
+  }, []);
 
-  const sendPasswordResetEmail = async (email: string) => {
+  const sendPasswordResetEmail = useCallback(async (email: string) => {
     await firebaseSendPasswordResetEmail(auth, email);
-  };
+  }, []);
   
-  const giveBonus = async (userId: string, amount: number, reason: string) => {
+  const giveBonus = useCallback(async (userId: string, amount: number, reason: string) => {
       if (!user?.admin) {
           throw new Error("You must be an admin to perform this action.");
       }
@@ -481,15 +481,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } catch (e: any) {
           throw new Error(e.message || "Bonus transaction failed.");
       }
-  };
+  }, [user]);
 
-  const updateWithdrawalDetails = async (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'jazzcashName' | 'easypaisaNumber' | 'easypaisaName'>>) => {
+  const updateWithdrawalDetails = useCallback(async (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'jazzcashName' | 'easypaisaNumber' | 'easypaisaName'>>) => {
     if (!user) throw new Error("User not authenticated.");
     const userRef = doc(db, 'users', user.uid);
     await updateDoc(userRef, details);
-  };
+  }, [user]);
 
-  const updatePresence = async () => {
+  const updatePresence = useCallback(async () => {
     if (auth.currentUser) {
         const userRef = doc(db, 'users', auth.currentUser.uid);
         try {
@@ -498,7 +498,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             console.warn("Could not update presence:", error);
         }
     }
-  };
+  }, []);
 
   const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds, updatePresence };
 
