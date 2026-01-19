@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { collection, onSnapshot, query, orderBy, doc, getDoc, setDoc, limit, where, getDocs } from 'firebase/firestore';
 import { db } from '@/firebase/init';
@@ -442,6 +442,7 @@ export default function AdminPage() {
     const [bonusUser, setBonusUser] = useState<AppUser | null>(null);
     const router = useRouter();
     const [activityCounts, setActivityCounts] = useState<Record<string, number>>({});
+    const countsFetched = useRef(false);
 
     useEffect(() => {
         const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
@@ -461,22 +462,30 @@ export default function AdminPage() {
     }, []);
 
     useEffect(() => {
-        if (users.length === 0) return;
+        // Don't run if users aren't loaded, or if counts have already been fetched.
+        if (loading || users.length === 0 || countsFetched.current) {
+            return;
+        }
 
+        countsFetched.current = true; // Set flag to prevent re-fetching
         const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-        users.forEach(user => {
-            const activityQuery = query(
+        const promises = users.map(user => 
+            getDocs(query(
                 collection(db, 'users', user.uid, 'activity'),
                 where('timestamp', '>=', twentyFourHoursAgo),
                 where('type', '==', 'login')
-            );
-
-            getDocs(activityQuery).then(snapshot => {
-                setActivityCounts(prev => ({ ...prev, [user.uid]: snapshot.size }));
-            });
+            )).then(snapshot => ({ uid: user.uid, count: snapshot.size }))
+        );
+        
+        Promise.all(promises).then(results => {
+            const newCounts = results.reduce((acc, result) => {
+                acc[result.uid] = result.count;
+                return acc;
+            }, {} as Record<string, number>);
+            setActivityCounts(newCounts);
         });
-    }, [users]);
+    }, [users, loading]);
 
     const getInitials = (name: string | null) => {
         if (!name) return "U";
@@ -583,3 +592,5 @@ export default function AdminPage() {
         </div>
     );
 }
+
+    
