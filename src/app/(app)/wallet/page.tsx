@@ -169,7 +169,7 @@ function WalletActions() {
             </CardHeader>
             <CardContent>
                 <Tabs defaultValue="withdraw" className="w-full">
-                    <TabsList className="grid w-full grid-cols-3">
+                    <TabsList className="flex h-auto w-full flex-wrap justify-start">
                         <TabsTrigger value="withdraw">Withdraw PKR</TabsTrigger>
                         <TabsTrigger value="uc">PUBG UC</TabsTrigger>
                         <TabsTrigger value="diamonds">FreeFire Diamonds</TabsTrigger>
@@ -434,7 +434,7 @@ export default function WalletPage() {
       </div>
 
        <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start">
           <TabsTrigger value="overview"><WalletIcon className="mr-2 h-4 w-4" /> Overview</TabsTrigger>
           <TabsTrigger value="transfer"><ArrowRightLeft className="mr-2 h-4 w-4" /> Transfer</TabsTrigger>
           <TabsTrigger value="purchase"><ShoppingBag className="mr-2 h-4 w-4" /> Withdraw & Purchase</TabsTrigger>

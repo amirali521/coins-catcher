@@ -1,4 +1,3 @@
-
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -234,7 +233,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start">
           <TabsTrigger value="profile">
             <User className="mr-2 h-4 w-4"/> Profile
           </TabsTrigger>

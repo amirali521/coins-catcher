@@ -27,7 +27,9 @@ const withdrawalSchema = z.object({
   freefireId: z.string().optional(),
   freefireName: z.string().optional(),
   jazzcashNumber: z.string().optional(),
+  jazzcashName: z.string().optional(),
   easypaisaNumber: z.string().optional(),
+  easypaisaName: z.string().optional(),
 });
 
 type WithdrawalFormValues = z.infer<typeof withdrawalSchema>;
@@ -44,7 +46,9 @@ function WithdrawalSettings() {
       freefireId: "",
       freefireName: "",
       jazzcashNumber: "",
+      jazzcashName: "",
       easypaisaNumber: "",
+      easypaisaName: "",
     },
   });
 
@@ -56,7 +60,9 @@ function WithdrawalSettings() {
         freefireId: user.freefireId || "",
         freefireName: user.freefireName || "",
         jazzcashNumber: user.jazzcashNumber || "",
+        jazzcashName: user.jazzcashName || "",
         easypaisaNumber: user.easypaisaNumber || "",
+        easypaisaName: user.easypaisaName || "",
       });
     }
   }, [user, form]);
@@ -140,7 +146,18 @@ function WithdrawalSettings() {
 
             <div className="space-y-4 rounded-lg border p-4">
               <h3 className="font-semibold">Payment Details</h3>
-              <div className="grid md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="jazzcashName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Jazzcash Account Name</FormLabel>
+                      <FormControl><Input placeholder="e.g. John Doe" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <FormField
                   control={form.control}
                   name="jazzcashNumber"
@@ -148,6 +165,17 @@ function WithdrawalSettings() {
                     <FormItem>
                       <FormLabel>Jazzcash Number</FormLabel>
                       <FormControl><Input placeholder="03xxxxxxxxx" {...field} /></FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <FormField
+                  control={form.control}
+                  name="easypaisaName"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Easypaisa Account Name</FormLabel>
+                      <FormControl><Input placeholder="e.g. Jane Doe" {...field} /></FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -205,7 +233,7 @@ export default function SettingsPage() {
       </div>
 
       <Tabs defaultValue="profile" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="flex h-auto w-full flex-wrap justify-start">
           <TabsTrigger value="profile">
             <User className="mr-2 h-4 w-4"/> Profile
           </TabsTrigger>
