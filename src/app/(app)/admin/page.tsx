@@ -638,14 +638,18 @@ export default function AdminPage() {
                                             {user.createdAt ? formatDistanceToNow(new Date(user.createdAt.seconds * 1000), { addSuffix: true }) : 'N/A'}
                                         </TableCell>
                                         <TableCell className="text-right space-x-2">
-                                            <Button variant="ghost" size="sm" onClick={() => setBonusUser(user)}>
-                                                <Gift className="mr-2 h-4 w-4" />
-                                                Bonus
-                                            </Button>
-                                            <Button variant={user.blocked ? 'secondary' : 'destructive'} size="sm" onClick={() => handleToggleBlock(user)}>
-                                                <Ban className="mr-2 h-4 w-4" />
-                                                {user.blocked ? 'Unblock' : 'Block'}
-                                            </Button>
+                                            {!user.admin && (
+                                                <>
+                                                    <Button variant="ghost" size="sm" onClick={() => setBonusUser(user)}>
+                                                        <Gift className="mr-2 h-4 w-4" />
+                                                        Bonus
+                                                    </Button>
+                                                    <Button variant={user.blocked ? 'secondary' : 'destructive'} size="sm" onClick={() => handleToggleBlock(user)}>
+                                                        <Ban className="mr-2 h-4 w-4" />
+                                                        {user.blocked ? 'Unblock' : 'Block'}
+                                                    </Button>
+                                                </>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -669,3 +673,6 @@ export default function AdminPage() {
 
     
 
+
+
+    
