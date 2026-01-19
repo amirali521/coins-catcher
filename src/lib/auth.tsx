@@ -45,6 +45,17 @@ interface User {
   easypaisaName?: string;
 }
 
+export type WithdrawalRequestType = 'pkr' | 'uc' | 'diamond';
+
+export interface WithdrawalRequestPayload {
+    type: WithdrawalRequestType;
+    pkrAmount: number;
+    details: {
+        packageAmount?: number;
+        withdrawalMethod?: 'Jazzcash' | 'Easypaisa' | 'PUBG' | 'FreeFire';
+    }
+}
+
 interface AuthContextType {
   user: User | null;
   firebaseUser: FirebaseUser | null;
@@ -58,13 +69,15 @@ interface AuthContextType {
   claimHourlyReward: (amount: number) => Promise<void>;
   claimFaucetReward: (amount: number) => Promise<void>;
   claimDailyReward: () => Promise<{ amount: number; newStreak: number }>;
-  withdrawPkr: (pkrAmount: number, description: string) => Promise<void>;
+  requestWithdrawal: (payload: WithdrawalRequestPayload) => Promise<void>;
   giveBonus: (userId: string, amount: number, reason: string) => Promise<void>;
   updateWithdrawalDetails: (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'jazzcashName' | 'easypaisaNumber' | 'easypaisaName'>>) => Promise<void>;
   transferFunds: (recipientId: string, amount: number, currency: 'coins' | 'pkr') => Promise<void>;
   updateUserBlockStatus: (userId: string, blocked: boolean) => Promise<void>;
   updateUserLogoutStatus: (userId: string, disabled: boolean) => Promise<void>;
   updateAllUsersLogoutStatus: (disabled: boolean) => Promise<void>;
+  approveWithdrawal: (requestId: string, userId: string, description: string) => Promise<void>;
+  rejectWithdrawal: (requestId: string, userId: string, reason: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -78,6 +91,18 @@ const addTransaction = async (userId: string, type: string, amount: number, desc
         date: serverTimestamp(),
     });
 };
+
+const addNotification = async (userId: string, title: string, message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    const notificationsRef = collection(db, 'users', userId, 'notifications');
+    await addDoc(notificationsRef, {
+        title,
+        message,
+        type,
+        read: false,
+        createdAt: serverTimestamp(),
+    });
+};
+
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -94,11 +119,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             if (docSnap.exists() && docSnap.data().coinToPkrRate) {
                 setCoinToPkrRate(docSnap.data().coinToPkrRate);
             } else {
-                setCoinToPkrRate(1); // Default if not set
+                setCoinToPkrRate(300); // Default if not set
             }
         } catch (error) {
             console.error("Failed to fetch conversion rate:", error);
-            setCoinToPkrRate(1); // Default on error
+            setCoinToPkrRate(300); // Default on error
         }
     };
     fetchRate();
@@ -107,7 +132,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     if (coinToPkrRate === null) {
-      return; // Wait until the conversion rate is loaded.
+      setLoading(true);
+      return; 
     }
 
     let unsubDoc: () => void = () => {};
@@ -411,25 +437,70 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return { amount: rewardAmount, newStreak: currentStreak };
   }, [user]);
 
-  const withdrawPkr = useCallback(async (pkrAmount: number, description: string) => {
+  const requestWithdrawal = useCallback(async (payload: WithdrawalRequestPayload) => {
     if (!user) throw new Error("User not authenticated");
-    if (user.pkrBalance < pkrAmount) throw new Error("Insufficient PKR balance");
     if (coinToPkrRate === null || coinToPkrRate <= 0) {
       throw new Error("Cannot process transaction: conversion rate is invalid.");
     }
-
-    const coinsToDeduct = Math.ceil((pkrAmount / coinToPkrRate) * 100000);
     
-    if (user.coins < coinsToDeduct) {
-        throw new Error("Insufficient coin balance for this transaction.");
+    let details: any = {
+      packageAmount: payload.details.packageAmount,
+      withdrawalMethod: payload.details.withdrawalMethod,
     }
     
-    const userRef = doc(db, 'users', user.uid);
-    await updateDoc(userRef, {
-      coins: increment(-coinsToDeduct),
+    if (payload.type === 'pkr') {
+        if (!user.easypaisaNumber && !user.jazzcashNumber) throw new Error("Please set up a withdrawal method in your settings.");
+        details.accountName = payload.details.withdrawalMethod === 'Easypaisa' ? user.easypaisaName : user.jazzcashName;
+        details.accountNumber = payload.details.withdrawalMethod === 'Easypaisa' ? user.easypaisaNumber : user.jazzcashNumber;
+    } else if (payload.type === 'uc') {
+        if (!user.pubgId) throw new Error("Please add your PUBG ID in your settings.");
+        details.gameId = user.pubgId;
+        details.gameName = user.pubgName;
+    } else if (payload.type === 'diamond') {
+        if (!user.freefireId) throw new Error("Please add your FreeFire ID in your settings.");
+        details.gameId = user.freefireId;
+        details.gameName = user.freefireName;
+    }
+
+    const coinsToDeduct = Math.ceil((payload.pkrAmount / coinToPkrRate) * 100000);
+
+    await runTransaction(db, async (transaction) => {
+        const userRef = doc(db, 'users', user.uid);
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists() || userDoc.data().coins < coinsToDeduct) {
+            throw new Error("Insufficient coin balance.");
+        }
+        
+        transaction.update(userRef, { coins: increment(-coinsToDeduct) });
+
+        const withdrawalRef = doc(collection(db, 'withdrawalRequests'));
+        transaction.set(withdrawalRef, {
+            userId: user.uid,
+            userDisplayName: user.displayName,
+            userEmail: user.email,
+            status: 'pending',
+            type: payload.type,
+            pkrAmount: payload.pkrAmount,
+            coinAmount: coinsToDeduct,
+            details,
+            createdAt: serverTimestamp(),
+        });
+        
+        const transactionDescription = payload.type === 'pkr' 
+            ? `${payload.pkrAmount} PKR Withdrawal Request` 
+            : `Purchase Request for ${payload.details.packageAmount} ${payload.type.toUpperCase()}`;
+
+        const transactionsRef = doc(collection(db, 'users', user.uid, 'transactions'));
+        transaction.set(transactionsRef, {
+            type: 'withdrawal-request',
+            amount: -coinsToDeduct,
+            description: transactionDescription,
+            date: serverTimestamp(),
+        });
     });
-    await addTransaction(user.uid, 'withdraw', -coinsToDeduct, description);
+
   }, [user, coinToPkrRate]);
+  
 
   const transferFunds = useCallback(async (recipientId: string, amount: number, currency: 'coins' | 'pkr') => {
     if (!user) throw new Error("User not authenticated.");
@@ -577,7 +648,44 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await batch.commit();
   }, [user, toast]);
 
-  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds, updateUserBlockStatus, updateUserLogoutStatus, updateAllUsersLogoutStatus };
+    const approveWithdrawal = useCallback(async (requestId: string, userId: string, description: string) => {
+        if (!user?.admin) throw new Error("Unauthorized");
+        const requestRef = doc(db, 'withdrawalRequests', requestId);
+        await updateDoc(requestRef, {
+            status: 'approved',
+            processedAt: serverTimestamp(),
+        });
+        await addNotification(userId, "Request Approved", `Your request for "${description}" has been approved.`);
+    }, [user]);
+
+    const rejectWithdrawal = useCallback(async (requestId: string, userId: string, reason: string) => {
+        if (!user?.admin) throw new Error("Unauthorized");
+
+        await runTransaction(db, async (transaction) => {
+            const requestRef = doc(db, 'withdrawalRequests', requestId);
+            const userRef = doc(db, 'users', userId);
+            
+            const requestDoc = await transaction.get(requestRef);
+            if (!requestDoc.exists()) throw new Error("Request not found.");
+
+            const { coinAmount } = requestDoc.data();
+
+            // Refund coins
+            transaction.update(userRef, { coins: increment(coinAmount) });
+
+            // Update request status
+            transaction.update(requestRef, {
+                status: 'rejected',
+                rejectionReason: reason,
+                processedAt: serverTimestamp(),
+            });
+        });
+
+        await addNotification(userId, "Request Rejected", `Your withdrawal request was rejected. Reason: ${reason}`, 'error');
+
+    }, [user]);
+
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, requestWithdrawal, giveBonus, updateWithdrawalDetails, transferFunds, updateUserBlockStatus, updateUserLogoutStatus, updateAllUsersLogoutStatus, approveWithdrawal, rejectWithdrawal };
 
   return (
     <AuthContext.Provider value={value}>

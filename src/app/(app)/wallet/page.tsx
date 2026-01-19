@@ -1,3 +1,4 @@
+
 "use client";
 
 import {
@@ -18,8 +19,8 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { useAuth } from "@/lib/auth";
-import { Coins, ArrowUpCircle, ArrowDownCircle, Loader2, Users, Wallet as WalletIcon, ArrowRightLeft, ShoppingBag, History } from "lucide-react";
+import { useAuth, WithdrawalRequestPayload } from "@/lib/auth";
+import { Coins, ArrowUpCircle, ArrowDownCircle, Loader2, Wallet as WalletIcon, ArrowRightLeft, ShoppingBag, History } from "lucide-react";
 import { useEffect, useState } from "react";
 import { collection, onSnapshot, orderBy, query, doc, getDoc } from "firebase/firestore";
 import { db } from "@/firebase/init";
@@ -55,6 +56,7 @@ interface WalletSettings {
 
 const withdrawalFormSchema = z.object({
   amount: z.coerce.number().min(100, { message: "Minimum withdrawal is 100 PKR." }),
+  method: z.enum(['Jazzcash', 'Easypaisa'], { required_error: "You must select a withdrawal method." }),
 });
 
 const transferFormSchema = z.object({
@@ -65,19 +67,19 @@ const transferFormSchema = z.object({
 
 
 function WalletActions() {
-    const { user, withdrawPkr } = useAuth();
+    const { user, requestWithdrawal } = useAuth();
     const { toast } = useToast();
     const [settings, setSettings] = useState<WalletSettings | null>(null);
     const [loadingSettings, setLoadingSettings] = useState(true);
-    const [isPurchasing, setIsPurchasing] = useState<string | null>(null); // Use a unique key like `type-index`
+    const [isSubmitting, setIsSubmitting] = useState<string | null>(null);
 
-    const formSchema = withdrawalFormSchema.refine(data => data.amount <= (user?.pkrBalance ?? 0), {
+    const pkrFormSchema = withdrawalFormSchema.refine(data => data.amount <= (user?.pkrBalance ?? 0), {
         message: "Amount exceeds your PKR balance.",
         path: ["amount"],
     });
 
-    const form = useForm<z.infer<typeof formSchema>>({
-        resolver: zodResolver(formSchema),
+    const pkrForm = useForm<z.infer<typeof pkrFormSchema>>({
+        resolver: zodResolver(pkrFormSchema),
         defaultValues: {
             amount: 100,
         },
@@ -101,24 +103,34 @@ function WalletActions() {
         fetchSettings();
     }, [toast]);
 
-    async function onWithdrawSubmit(data: z.infer<typeof formSchema>) {
+    async function onWithdrawSubmit(data: z.infer<typeof pkrFormSchema>) {
+        setIsSubmitting('pkr-withdraw');
         try {
-            await withdrawPkr(data.amount, `${data.amount} PKR Withdrawal`);
+            const payload: WithdrawalRequestPayload = {
+                type: 'pkr',
+                pkrAmount: data.amount,
+                details: {
+                    withdrawalMethod: data.method,
+                }
+            };
+            await requestWithdrawal(payload);
             toast({
-                title: "Withdrawal Successful",
-                description: `Your request for ${data.amount} PKR has been processed.`,
+                title: "Request Submitted",
+                description: `Your withdrawal request for ${data.amount} PKR has been submitted for review.`,
             });
-            form.reset();
+            pkrForm.reset();
         } catch (error: any) {
             toast({
                 variant: "destructive",
                 title: "Withdrawal Failed",
                 description: error.message,
             });
+        } finally {
+            setIsSubmitting(null);
         }
     }
 
-    const handlePurchase = async (pkg: Package, type: 'UC' | 'Diamond', index: number) => {
+    const handlePurchase = async (pkg: Package, type: 'uc' | 'diamond', index: number) => {
         if (!user) {
              toast({
                 variant: "destructive",
@@ -138,12 +150,20 @@ function WalletActions() {
         }
 
         const purchaseKey = `${type}-${index}`;
-        setIsPurchasing(purchaseKey);
+        setIsSubmitting(purchaseKey);
         try {
-            await withdrawPkr(pkg.price, `Purchase of ${pkg.amount} ${type}`);
+            const payload: WithdrawalRequestPayload = {
+                type: type,
+                pkrAmount: pkg.price,
+                details: {
+                   packageAmount: pkg.amount,
+                   withdrawalMethod: type === 'uc' ? 'PUBG' : 'FreeFire',
+                }
+            };
+            await requestWithdrawal(payload);
              toast({
-                title: "Purchase Successful!",
-                description: `You purchased ${pkg.amount} ${type} for ${pkg.price} PKR.`,
+                title: "Purchase Request Submitted!",
+                description: `Your request for ${pkg.amount} ${type.toUpperCase()} has been submitted for review.`,
             });
         } catch (error: any) {
              toast({
@@ -152,7 +172,7 @@ function WalletActions() {
                 description: error.message,
             });
         } finally {
-            setIsPurchasing(null);
+            setIsSubmitting(null);
         }
     };
 
@@ -174,25 +194,22 @@ function WalletActions() {
          <Card>
             <CardHeader>
                 <CardTitle>Withdrawals & Purchases</CardTitle>
-                <CardDescription>Use your PKR balance to withdraw cash or purchase in-game currency.</CardDescription>
+                <CardDescription>Use your PKR balance to withdraw cash or purchase in-game currency. All requests are reviewed by an admin.</CardDescription>
             </CardHeader>
             <CardContent>
                 <Tabs defaultValue="withdraw" className="w-full">
-                    <TabsList className="flex h-auto w-full flex-wrap justify-start">
+                    <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="withdraw">Withdraw PKR</TabsTrigger>
                         <TabsTrigger value="uc">PUBG UC</TabsTrigger>
                         <TabsTrigger value="diamonds">FreeFire Diamonds</TabsTrigger>
                     </TabsList>
                     
                     <TabsContent value="withdraw" className="pt-6">
-                        <Form {...form}>
-                            <form onSubmit={form.handleSubmit(onWithdrawSubmit)} className="space-y-6 max-w-md mx-auto">
-                                <h3 className="font-semibold text-lg">Withdraw Funds</h3>
-                                <p className="text-sm text-muted-foreground">
-                                    Withdrawals to Easypaisa/Jazzcash are simulated. The amount will be deducted from your balance.
-                                </p>
-                                 <FormField
-                                    control={form.control}
+                        <Form {...pkrForm}>
+                            <form onSubmit={pkrForm.handleSubmit(onWithdrawSubmit)} className="space-y-6 max-w-md mx-auto">
+                                <h3 className="font-semibold text-lg">Request a Withdrawal</h3>
+                                <FormField
+                                    control={pkrForm.control}
                                     name="amount"
                                     render={({ field }) => (
                                         <FormItem>
@@ -204,15 +221,47 @@ function WalletActions() {
                                         </FormItem>
                                     )}
                                 />
-                                <Button type="submit" disabled={form.formState.isSubmitting}>
-                                    {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Withdraw
+                                 <FormField
+                                    control={pkrForm.control}
+                                    name="method"
+                                    render={({ field }) => (
+                                        <FormItem className="space-y-3">
+                                            <FormLabel>Withdrawal Method</FormLabel>
+                                            <p className="text-xs text-muted-foreground">Ensure your account details are correct in Settings.</p>
+                                            <FormControl>
+                                                <RadioGroup onValueChange={field.onChange} defaultValue={field.value} className="flex gap-4">
+                                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                                        <FormControl>
+                                                            <RadioGroupItem value="Jazzcash" disabled={!user?.jazzcashNumber}/>
+                                                        </FormControl>
+                                                        <FormLabel className="font-normal">
+                                                            Jazzcash {!user?.jazzcashNumber && '(Not Configured)'}
+                                                        </FormLabel>
+                                                    </FormItem>
+                                                    <FormItem className="flex items-center space-x-3 space-y-0">
+                                                        <FormControl>
+                                                            <RadioGroupItem value="Easypaisa" disabled={!user?.easypaisaNumber} />
+                                                        </FormControl>
+                                                        <FormLabel className="font-normal">
+                                                            Easypaisa {!user?.easypaisaNumber && '(Not Configured)'}
+                                                        </FormLabel>
+                                                    </FormItem>
+                                                </RadioGroup>
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                    />
+                                <Button type="submit" disabled={!!isSubmitting}>
+                                    {isSubmitting === 'pkr-withdraw' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                    Submit Request
                                 </Button>
                             </form>
                         </Form>
                     </TabsContent>
 
                     <TabsContent value="uc" className="pt-6">
+                        <p className="text-sm text-center mb-4 text-muted-foreground">Ensure your PUBG ID is correct in Settings before purchasing.</p>
                          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             {settings?.ucPackages && settings.ucPackages.length > 0 ? (
                                 settings.ucPackages.map((pkg, index) => (
@@ -226,10 +275,10 @@ function WalletActions() {
                                         <CardFooter>
                                             <Button 
                                                 className="w-full"
-                                                disabled={isPurchasing !== null}
-                                                onClick={() => handlePurchase(pkg, 'UC', index)}
+                                                disabled={!!isSubmitting || !user?.pubgId}
+                                                onClick={() => handlePurchase(pkg, 'uc', index)}
                                             >
-                                                {isPurchasing === `UC-${index}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Purchase"}
+                                                {isSubmitting === `uc-${index}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Request Purchase"}
                                             </Button>
                                         </CardFooter>
                                     </Card>
@@ -239,6 +288,7 @@ function WalletActions() {
                     </TabsContent>
                     
                     <TabsContent value="diamonds" className="pt-6">
+                        <p className="text-sm text-center mb-4 text-muted-foreground">Ensure your FreeFire ID is correct in Settings before purchasing.</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             {settings?.diamondPackages && settings.diamondPackages.length > 0 ? (
                                 settings.diamondPackages.map((pkg, index) => (
@@ -252,10 +302,10 @@ function WalletActions() {
                                         <CardFooter>
                                             <Button 
                                                 className="w-full"
-                                                disabled={isPurchasing !== null}
-                                                onClick={() => handlePurchase(pkg, 'Diamond', index)}
+                                                disabled={!!isSubmitting || !user?.freefireId}
+                                                onClick={() => handlePurchase(pkg, 'diamond', index)}
                                             >
-                                                {isPurchasing === `Diamond-${index}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Purchase"}
+                                                {isSubmitting === `diamond-${index}` ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Request Purchase"}
                                             </Button>
                                         </CardFooter>
                                     </Card>
@@ -467,10 +517,10 @@ export default function WalletPage() {
                 <Card>
                 <CardHeader>
                     <CardTitle>PKR Balance</CardTitle>
-                    <CardDescription>Your balance converted to PKR.</CardDescription>
+                    <CardDescription>Your estimated balance in PKR. This is the balance you can withdraw from.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex items-center gap-4 text-4xl font-bold text-accent">
+                    <div className="flex items-center gap-4 text-4xl font-bold text-green-500">
                     <span className="text-2xl font-medium">PKR</span>
                     <span>{formatLargeNumber(user?.pkrBalance)}</span>
                     </div>

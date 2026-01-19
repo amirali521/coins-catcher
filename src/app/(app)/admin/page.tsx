@@ -1,31 +1,40 @@
 
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { collection, query, orderBy, doc, getDoc, setDoc, getDocs, limit } from 'firebase/firestore';
+import { useEffect, useState, useCallback } from 'react';
+import { collection, query, orderBy, doc, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '@/firebase/init';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
-import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon, Settings, LayoutDashboard, UserCog, Ban, LogOut } from 'lucide-react';
+import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon, Settings, LayoutDashboard, UserCog, Ban, LogOut, PackageCheck, PackageX, Banknote, Gamepad2, AlertTriangle } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/lib/auth';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogClose } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatLargeNumber } from '@/lib/utils';
+import { formatLargeNumber, cn } from '@/lib/utils';
 import { Switch } from '@/components/ui/switch';
-
+import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
 interface AppUser {
     uid: string;
@@ -38,6 +47,29 @@ interface AppUser {
     createdAt: { seconds: number; nanoseconds: number; } | null;
     referredBy?: string;
 }
+
+interface WithdrawalRequest {
+  id: string;
+  userId: string;
+  userDisplayName: string;
+  userEmail: string;
+  type: 'pkr' | 'uc' | 'diamond';
+  status: 'pending' | 'approved' | 'rejected';
+  pkrAmount: number;
+  coinAmount: number;
+  details: {
+    packageAmount?: number;
+    gameId?: string;
+    gameName?: string;
+    accountName?: string;
+    accountNumber?: string;
+    withdrawalMethod?: 'Jazzcash' | 'Easypaisa' | 'PUBG' | 'FreeFire';
+  };
+  rejectionReason?: string;
+  createdAt: { seconds: number; nanoseconds: number; };
+  processedAt?: { seconds: number; nanoseconds: number; };
+}
+
 
 const packageSchema = z.object({
     amount: z.number().min(1, "Amount must be positive"),
@@ -57,6 +89,228 @@ const bonusFormSchema = z.object({
     reason: z.string().min(3, "Please provide a reason.").max(100),
 });
 type BonusForm = z.infer<typeof bonusFormSchema>;
+
+const rejectionFormSchema = z.object({
+    reason: z.string().min(10, "Please provide a detailed reason for rejection.").max(200),
+});
+type RejectionForm = z.infer<typeof rejectionFormSchema>;
+
+
+function RejectDialog({ request, isOpen, onClose }: { request: WithdrawalRequest | null; isOpen: boolean; onClose: () => void; }) {
+    const { toast } = useToast();
+    const { rejectWithdrawal } = useAuth();
+    
+    const form = useForm<RejectionForm>({
+        resolver: zodResolver(rejectionFormSchema),
+        defaultValues: { reason: '' },
+    });
+    
+    const onSubmit = async (data: RejectionForm) => {
+        if (!request) return;
+        try {
+            await rejectWithdrawal(request.id, request.userId, data.reason);
+            toast({
+                title: "Request Rejected",
+                description: `The request has been rejected and the user has been notified.`,
+            });
+            form.reset();
+            onClose();
+        } catch (error: any) {
+             toast({
+                variant: 'destructive',
+                title: 'Failed to Reject',
+                description: error.message,
+            });
+        }
+    };
+    
+    if (!request) return null;
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent>
+                 <DialogHeader>
+                    <DialogTitle>Reject Withdrawal Request</DialogTitle>
+                    <DialogDescription>
+                        Provide a reason for rejecting this request. The user will be notified and their funds will be returned.
+                    </DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                        <FormField
+                            control={form.control}
+                            name="reason"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Rejection Reason</FormLabel>
+                                    <FormControl>
+                                        <Textarea placeholder="e.g., Account name and number do not match." {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <DialogFooter>
+                            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+                            <Button type="submit" variant="destructive" disabled={form.formState.isSubmitting}>
+                                {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Confirm Rejection
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+function WithdrawalRequests() {
+    const [requests, setRequests] = useState<WithdrawalRequest[]>([]);
+    const [loading, setLoading] = useState(true);
+    const { toast } = useToast();
+    const { approveWithdrawal } = useAuth();
+    const [activeTab, setActiveTab] = useState<'pending' | 'processed'>('pending');
+    const [rejectingRequest, setRejectingRequest] = useState<WithdrawalRequest | null>(null);
+
+    useEffect(() => {
+        setLoading(true);
+        const q = query(collection(db, 'withdrawalRequests'), orderBy('createdAt', 'desc'));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const allRequests = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WithdrawalRequest));
+            setRequests(allRequests);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching withdrawal requests:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch withdrawal requests.' });
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [toast]);
+    
+    const handleApprove = async (request: WithdrawalRequest) => {
+        try {
+            const description = request.type === 'pkr' ? `${request.pkrAmount} PKR` : `${request.details.packageAmount} ${request.type.toUpperCase()}`;
+            await approveWithdrawal(request.id, request.userId, description);
+            toast({ title: 'Request Approved', description: 'The user has been notified.' });
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Approval Failed', description: error.message });
+        }
+    };
+    
+    const filteredRequests = requests.filter(r => {
+        if (activeTab === 'pending') return r.status === 'pending';
+        return r.status === 'approved' || r.status === 'rejected';
+    });
+
+    const getRequestTitle = (req: WithdrawalRequest) => {
+        if (req.type === 'pkr') return `Withdraw ${req.pkrAmount} PKR`;
+        return `Purchase ${req.details.packageAmount} ${req.type.toUpperCase()}`;
+    };
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Withdrawal Requests</CardTitle>
+                <CardDescription>Review and process user withdrawal and purchase requests.</CardDescription>
+                 <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full pt-4">
+                    <TabsList>
+                        <TabsTrigger value="pending">Pending</TabsTrigger>
+                        <TabsTrigger value="processed">Processed</TabsTrigger>
+                    </TabsList>
+                </Tabs>
+            </CardHeader>
+            <CardContent>
+                <ScrollArea className="h-[600px]">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>User</TableHead>
+                                <TableHead>Request</TableHead>
+                                <TableHead>Details</TableHead>
+                                <TableHead>Date</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                         <TableBody>
+                            {loading ? (
+                                <TableRow><TableCell colSpan={5} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" /></TableCell></TableRow>
+                            ) : filteredRequests.length === 0 ? (
+                                <TableRow><TableCell colSpan={5} className="h-24 text-center">No {activeTab} requests.</TableCell></TableRow>
+                            ) : (
+                                filteredRequests.map(req => (
+                                    <TableRow key={req.id}>
+                                        <TableCell>
+                                            <div className="font-medium">{req.userDisplayName}</div>
+                                            <div className="text-sm text-muted-foreground">{req.userEmail}</div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className={cn("font-semibold flex items-center gap-2", {
+                                                'text-green-500': req.type === 'pkr',
+                                                'text-blue-400': req.type !== 'pkr'
+                                            })}>
+                                                {req.type === 'pkr' ? <Banknote /> : <Gamepad2 />}
+                                                {getRequestTitle(req)}
+                                            </div>
+                                            <div className="text-sm text-muted-foreground">Cost: {req.coinAmount.toLocaleString()} coins</div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="text-xs space-y-1">
+                                                <p><strong>Method:</strong> {req.details.withdrawalMethod}</p>
+                                                {req.details.accountName && <p><strong>Name:</strong> {req.details.accountName}</p>}
+                                                {req.details.accountNumber && <p><strong>Number:</strong> {req.details.accountNumber}</p>}
+                                                {req.details.gameName && <p><strong>Game Name:</strong> {req.details.gameName}</p>}
+                                                {req.details.gameId && <p><strong>Game ID:</strong> {req.details.gameId}</p>}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground">
+                                            {formatDistanceToNow(req.createdAt.seconds * 1000, { addSuffix: true })}
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            {req.status === 'pending' ? (
+                                                <div className="flex gap-2 justify-end">
+                                                    <AlertDialog>
+                                                        <AlertDialogTrigger asChild>
+                                                            <Button size="sm"><PackageCheck className="mr-2 h-4 w-4" />Approve</Button>
+                                                        </AlertDialogTrigger>
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                                <AlertDialogDescription>
+                                                                    This will mark the request as approved. This action cannot be undone.
+                                                                </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                                <AlertDialogAction onClick={() => handleApprove(req)}>Confirm</AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    </AlertDialog>
+                                                    <Button variant="destructive" size="sm" onClick={() => setRejectingRequest(req)}><PackageX className="mr-2 h-4 w-4"/>Reject</Button>
+                                                </div>
+                                            ) : (
+                                                 <Badge variant={req.status === 'approved' ? 'secondary' : 'destructive'} className="capitalize flex gap-2">
+                                                    {req.status === 'approved' ? <PackageCheck className="h-4 w-4"/> : <PackageX className="h-4 w-4"/>}
+                                                    {req.status}
+                                                 </Badge>
+                                            )}
+                                             {req.status === 'rejected' && req.rejectionReason && (
+                                                <p className="text-xs text-destructive mt-1 flex items-start gap-1"><AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />{req.rejectionReason}</p>
+                                             )}
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </ScrollArea>
+                <RejectDialog isOpen={!!rejectingRequest} onClose={() => setRejectingRequest(null)} request={rejectingRequest} />
+            </CardContent>
+        </Card>
+    );
+}
+
 
 function BonusDialog({ user, isOpen, onClose }: { user: AppUser | null, isOpen: boolean, onClose: () => void }) {
     const { toast } = useToast();
@@ -450,35 +704,34 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(true);
     const [bonusUser, setBonusUser] = useState<AppUser | null>(null);
     const [isUpdatingAll, setIsUpdatingAll] = useState(false);
-    const router = useRouter();
     const { updateUserBlockStatus, updateUserLogoutStatus, updateAllUsersLogoutStatus } = useAuth();
     const { toast } = useToast();
 
-    useEffect(() => {
-        const fetchUsers = async () => {
-            setLoading(true);
-            try {
-                const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
-                const querySnapshot = await getDocs(usersQuery);
-                const usersData: AppUser[] = [];
-                querySnapshot.forEach((doc) => {
-                    usersData.push({ ...doc.data(), uid: doc.id } as AppUser);
-                });
-                setUsers(usersData);
-            } catch (error) {
-                console.error("Error fetching users:", error);
-                toast({
-                    variant: "destructive",
-                    title: "Failed to load users",
-                    description: "There was an error fetching the user list.",
-                });
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        fetchUsers();
+    const fetchUsers = useCallback(async () => {
+        setLoading(true);
+        try {
+            const usersQuery = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+            const querySnapshot = await getDocs(usersQuery);
+            const usersData: AppUser[] = [];
+            querySnapshot.forEach((doc) => {
+                usersData.push({ ...doc.data(), uid: doc.id } as AppUser);
+            });
+            setUsers(usersData);
+        } catch (error) {
+            console.error("Error fetching users:", error);
+            toast({
+                variant: "destructive",
+                title: "Failed to load users",
+                description: "There was an error fetching the user list.",
+            });
+        } finally {
+            setLoading(false);
+        }
     }, [toast]);
+
+    useEffect(() => {
+        fetchUsers();
+    }, [fetchUsers]);
 
     const getInitials = (name: string | null) => {
         if (!name) return "U";
@@ -492,7 +745,7 @@ export default function AdminPage() {
                 title: `User ${!user.blocked ? 'Blocked' : 'Unblocked'}`,
                 description: `${user.displayName} has been ${!user.blocked ? 'blocked' : 'unblocked'}.`,
             });
-            setUsers(prevUsers => prevUsers.map(u => u.uid === user.uid ? { ...u, blocked: !u.blocked } : u));
+            await fetchUsers(); // Re-fetch to get the latest state
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Error', description: error.message });
         }
@@ -506,7 +759,7 @@ export default function AdminPage() {
                 title: `User Updated`,
                 description: `${userToUpdate.displayName}'s logout has been ${newStatus ? 'disabled' : 'enabled'}.`,
             });
-            setUsers(prevUsers => prevUsers.map(u => u.uid === userToUpdate.uid ? { ...u, logoutDisabled: newStatus } : u));
+            await fetchUsers(); // Re-fetch
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Error', description: error.message });
         }
@@ -520,7 +773,7 @@ export default function AdminPage() {
                 title: "Bulk Update Successful",
                 description: `Logout has been ${disable ? 'disabled' : 'enabled'} for all non-admin users.`
             });
-            setUsers(prevUsers => prevUsers.map(u => u.admin ? u : { ...u, logoutDisabled: disable }));
+            await fetchUsers(); // Re-fetch
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Bulk Update Failed', description: error.message });
         } finally {
@@ -537,9 +790,10 @@ export default function AdminPage() {
             </div>
             
             <Tabs defaultValue="overview" className="w-full">
-              <TabsList className="flex h-auto w-full flex-wrap justify-center">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="overview"><LayoutDashboard className="mr-2 h-4 w-4"/> Overview</TabsTrigger>
                 <TabsTrigger value="users"><UserCog className="mr-2 h-4 w-4"/> User Management</TabsTrigger>
+                <TabsTrigger value="withdrawals"><Banknote className="mr-2 h-4 w-4" /> Withdrawal Requests</TabsTrigger>
                 <TabsTrigger value="settings"><Settings className="mr-2 h-4 w-4"/> Wallet Settings</TabsTrigger>
               </TabsList>
 
@@ -658,6 +912,10 @@ export default function AdminPage() {
                     </CardContent>
                 </Card>
               </TabsContent>
+
+              <TabsContent value="withdrawals" className="mt-6">
+                <WithdrawalRequests />
+              </TabsContent>
               
               <TabsContent value="settings" className="mt-6">
                 <WalletSettings />
@@ -668,11 +926,3 @@ export default function AdminPage() {
         </div>
     );
 }
-
-    
-
-    
-
-
-
-    

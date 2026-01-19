@@ -59,6 +59,18 @@ service cloud.firestore {
         // Transactions are immutable.
         allow update, delete: if false;
       }
+
+      match /notifications/{notificationId} {
+        allow read, list, update: if isOwner(userId);
+        allow create: if isAdmin();
+      }
+    }
+
+    match /withdrawalRequests/{requestId} {
+      allow read, list: if isAdmin();
+      allow create: if request.auth.uid == request.resource.data.userId;
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
     }
   }
 }
