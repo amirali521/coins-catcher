@@ -430,14 +430,23 @@ export default function DashboardPage() {
                     <div className="text-sm text-muted-foreground font-semibold">
                         10 TapTap Coins = 1 Main Coin
                     </div>
-                    <Button variant="outline" className="w-full" onClick={() => {
-                        window.open('https://www.effectivegatecpm.com/rjxuuya9?key=0ca0a474faa38ad1b07174333d291e37', '_blank');
-                        setTapTapAdClicked(true);
-                    }}>
-                        Step 1: Open Link
-                    </Button>
-                    <Button className="w-full" onClick={handleTapTapClaim} disabled={!tapTapAdClicked || tapTapCoins < 10}>
-                        Step 2: Claim {Math.floor(tapTapCoins / 10)} Main Coins
+                    <Button
+                        className="w-full"
+                        variant={!tapTapAdClicked ? "outline" : "default"}
+                        onClick={() => {
+                            if (!tapTapAdClicked) {
+                                window.open('https://www.effectivegatecpm.com/rjxuuya9?key=0ca0a474faa38ad1b07174333d291e37', '_blank');
+                                setTapTapAdClicked(true);
+                            } else {
+                                handleTapTapClaim();
+                            }
+                        }}
+                        disabled={tapTapAdClicked && tapTapCoins < 10}
+                    >
+                        {!tapTapAdClicked
+                            ? "Step 1: Open Link to Enable Claim"
+                            : `Step 2: Claim ${Math.floor(tapTapCoins / 10)} Main Coins`
+                        }
                     </Button>
                 </CardFooter>
             </Card>
@@ -446,3 +455,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
