@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
@@ -15,8 +14,9 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import { auth, db } from '@/firebase/init';
-import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection, addDoc } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection, addDoc, runTransaction } from 'firebase/firestore';
 import { isToday, isYesterday } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
 
 interface User {
   uid: string;
@@ -31,6 +31,12 @@ interface User {
   dailyStreakCount: number;
   lastDailyClaim: { seconds: number; nanoseconds: number; } | null;
   lastFaucetClaimTimestamp?: { seconds: number; nanoseconds: number; } | null;
+  pubgId?: string;
+  pubgName?: string;
+  freefireId?: string;
+  freefireName?: string;
+  jazzcashNumber?: string;
+  easypaisaNumber?: string;
 }
 
 interface AuthContextType {
@@ -47,6 +53,9 @@ interface AuthContextType {
   claimFaucetReward: (amount: number) => Promise<void>;
   claimDailyReward: () => Promise<{ amount: number; newStreak: number }>;
   withdrawPkr: (pkrAmount: number, description: string) => Promise<void>;
+  giveBonus: (userId: string, amount: number, reason: string) => Promise<void>;
+  updateWithdrawalDetails: (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'easypaisaNumber'>>) => Promise<void>;
+  transferFunds: (recipientId: string, amount: number, currency: 'coins' | 'pkr') => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -66,6 +75,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [coinToPkrRate, setCoinToPkrRate] = useState<number | null>(null);
+  const { toast } = useToast();
 
   // Effect to fetch and listen to the wallet config for the conversion rate
   useEffect(() => {
@@ -84,13 +94,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (fbUser) => {
+    let unsubDoc: () => void = () => {};
+
+    const unsubscribeAuth = onAuthStateChanged(auth, (fbUser) => {
+      // First, unsubscribe from any previous user's document listener
+      unsubDoc();
+
       if (fbUser) {
         setFirebaseUser(fbUser);
         const userDocRef = doc(db, 'users', fbUser.uid);
         
-        const unsubDoc = onSnapshot(userDocRef, (docSnap) => {
-          // We need both user data and the rate to proceed
+        // Subscribe to the new user's document
+        unsubDoc = onSnapshot(userDocRef, (docSnap) => {
           if (docSnap.exists() && coinToPkrRate !== null) {
             const userData = docSnap.data();
 
@@ -110,6 +125,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               dailyStreakCount: userData.dailyStreakCount || 0,
               lastDailyClaim: userData.lastDailyClaim || null,
               lastFaucetClaimTimestamp: userData.lastFaucetClaimTimestamp || null,
+              pubgId: userData.pubgId,
+              pubgName: userData.pubgName,
+              freefireId: userData.freefireId,
+              freefireName: userData.freefireName,
+              jazzcashNumber: userData.jazzcashNumber,
+              easypaisaNumber: userData.easypaisaNumber,
             });
              setLoading(false);
           } else if (!docSnap.exists()){
@@ -118,10 +139,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           }
         }, (error) => {
             console.error("Firestore snapshot error:", error);
+            toast({
+              variant: "destructive",
+              title: "Data Sync Error",
+              description: "Could not sync user data. Please try again."
+            })
             setLoading(false);
         });
-
-        return () => unsubDoc();
       } else {
         setFirebaseUser(null);
         setUser(null);
@@ -129,9 +153,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     });
 
-    // Cleanup subscription on component unmount
-    return () => unsubscribe();
-  }, [coinToPkrRate]); // Rerun this effect if the conversion rate changes
+    return () => {
+      unsubscribeAuth();
+      unsubDoc();
+    };
+  }, [coinToPkrRate, toast]);
 
 
   const login = async (email: string, password?: string) => {
@@ -236,7 +262,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const logout = async () => {
-    await firebaseSignOut(auth);
+    try {
+      await firebaseSignOut(auth);
+    } catch (error: any) {
+        toast({
+            variant: "destructive",
+            title: "Logout Failed",
+            description: error.message.replace('Firebase: ', ''),
+        });
+    }
   };
 
   const claimHourlyReward = async (amount: number) => {
@@ -323,6 +357,70 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
     await addTransaction(user.uid, 'withdraw', -coinsToDeduct, description);
   };
+
+  const transferFunds = async (recipientId: string, amount: number, currency: 'coins' | 'pkr') => {
+    if (!user) throw new Error("User not authenticated.");
+    if (user.uid === recipientId) throw new Error("You cannot transfer funds to yourself.");
+
+    if (amount <= 0) {
+      throw new Error("Transfer amount must be positive.");
+    }
+
+    await runTransaction(db, async (transaction) => {
+      const senderRef = doc(db, 'users', user.uid);
+      const recipientRef = doc(db, 'users', recipientId);
+
+      const [senderDoc, recipientDoc] = await Promise.all([
+        transaction.get(senderRef),
+        transaction.get(recipientRef),
+      ]);
+
+      if (!senderDoc.exists()) {
+        throw new Error("Sender document not found.");
+      }
+      if (!recipientDoc.exists()) {
+        throw new Error("Recipient User ID not found.");
+      }
+      
+      const senderData = senderDoc.data();
+      const recipientData = recipientDoc.data();
+      let coinsToTransfer = 0;
+      let description = "";
+
+      if (currency === 'coins') {
+        coinsToTransfer = amount;
+        if (senderData.coins < coinsToTransfer) {
+          throw new Error("Insufficient coin balance.");
+        }
+        description = `${amount.toLocaleString()} coins`;
+      } else { // currency === 'pkr'
+        if (coinToPkrRate === null || coinToPkrRate <= 0) {
+          throw new Error("Cannot process transaction: conversion rate is invalid.");
+        }
+        const senderPkrBalance = Math.floor((senderData.coins / 100000) * coinToPkrRate);
+        if (senderPkrBalance < amount) {
+          throw new Error("Insufficient PKR balance.");
+        }
+        coinsToTransfer = Math.ceil((amount / coinToPkrRate) * 100000);
+         if (senderData.coins < coinsToTransfer) {
+          throw new Error("Insufficient coin balance for this PKR amount.");
+        }
+        description = `${amount.toLocaleString()} PKR`;
+      }
+
+      // Perform updates within the transaction
+      transaction.update(senderRef, { coins: increment(-coinsToTransfer) });
+      transaction.update(recipientRef, { coins: increment(coinsToTransfer) });
+
+      // Create transaction logs (can't use serverTimestamp in a transaction)
+      const now = new Date();
+      const senderLog = { type: 'transfer-sent', amount: -coinsToTransfer, description: `Sent ${description} to ${recipientData.displayName || recipientId}`, date: now };
+      const recipientLog = { type: 'transfer-received', amount: coinsToTransfer, description: `Received ${description} from ${senderData.displayName || user.uid}`, date: now };
+      
+      transaction.set(doc(collection(db, 'users', user.uid, 'transactions')), senderLog);
+      transaction.set(doc(collection(db, 'users', recipientId, 'transactions')), recipientLog);
+    });
+  };
   
   const sendVerificationEmail = async () => {
     if (auth.currentUser) {
@@ -335,8 +433,28 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const sendPasswordResetEmail = async (email: string) => {
     await firebaseSendPasswordResetEmail(auth, email);
   };
+  
+  const giveBonus = async (userId: string, amount: number, reason: string) => {
+      if (!user?.admin) {
+          throw new Error("You must be an admin to perform this action.");
+      }
+      if (amount <= 0) {
+          throw new Error("Bonus amount must be positive.");
+      }
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, {
+          coins: increment(amount)
+      });
+      await addTransaction(userId, 'bonus', amount, `Admin Bonus: ${reason}`);
+  };
 
-  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr };
+  const updateWithdrawalDetails = async (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'easypaisaNumber'>>) => {
+    if (!user) throw new Error("User not authenticated.");
+    const userRef = doc(db, 'users', user.uid);
+    await updateDoc(userRef, details);
+  };
+
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds };
 
   return (
     <AuthContext.Provider value={value}>
