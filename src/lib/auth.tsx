@@ -87,21 +87,29 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { toast } = useToast();
 
   useEffect(() => {
-    const configRef = doc(db, 'config', 'wallet');
-    const unsubConfig = onSnapshot(configRef, (docSnap) => {
-      if (docSnap.exists()) {
-        setCoinToPkrRate(docSnap.data().coinToPkrRate || 1);
-      } else {
-        setCoinToPkrRate(1); 
-      }
-    }, () => {
-      setCoinToPkrRate(1); 
-    });
-    return () => unsubConfig();
+    const fetchRate = async () => {
+        try {
+            const configRef = doc(db, 'config', 'wallet');
+            const docSnap = await getDoc(configRef);
+            if (docSnap.exists() && docSnap.data().coinToPkrRate) {
+                setCoinToPkrRate(docSnap.data().coinToPkrRate);
+            } else {
+                setCoinToPkrRate(1); // Default if not set
+            }
+        } catch (error) {
+            console.error("Failed to fetch conversion rate:", error);
+            setCoinToPkrRate(1); // Default on error
+        }
+    };
+    fetchRate();
   }, []);
 
 
   useEffect(() => {
+    if (coinToPkrRate === null) {
+      return; // Wait until the conversion rate is loaded.
+    }
+
     let unsubDoc: () => void = () => {};
 
     const unsubscribeAuth = onAuthStateChanged(auth, (fbUser) => {
@@ -114,7 +122,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const userDocRef = doc(db, 'users', fbUser.uid);
         
         unsubDoc = onSnapshot(userDocRef, (docSnap) => {
-          if (docSnap.exists() && coinToPkrRate !== null) {
+          if (docSnap.exists()) {
             const userData = docSnap.data();
             const pkrBalance = Math.floor((userData.coins / 100000) * coinToPkrRate);
             
