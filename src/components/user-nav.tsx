@@ -72,7 +72,7 @@ export function UserNav() {
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={logout}>
+        <DropdownMenuItem onClick={logout} disabled={user.logoutDisabled}>
           <LogOut />
           Log out
         </DropdownMenuItem>

@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -15,7 +16,7 @@ import {
   deleteUser,
 } from 'firebase/auth';
 import { auth, db } from '@/firebase/init';
-import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection, addDoc, runTransaction } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, getDoc, serverTimestamp, updateDoc, query, where, getDocs, limit, increment, collection, addDoc, runTransaction, writeBatch } from 'firebase/firestore';
 import { isToday, isYesterday } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
@@ -29,6 +30,7 @@ interface User {
   referralCode: string;
   admin: boolean;
   blocked?: boolean;
+  logoutDisabled?: boolean;
   lastClaimTimestamp?: { seconds: number; nanoseconds: number; } | null; // Hourly
   dailyStreakCount: number;
   lastDailyClaim: { seconds: number; nanoseconds: number; } | null;
@@ -61,6 +63,8 @@ interface AuthContextType {
   updateWithdrawalDetails: (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'jazzcashName' | 'easypaisaNumber' | 'easypaisaName'>>) => Promise<void>;
   transferFunds: (recipientId: string, amount: number, currency: 'coins' | 'pkr') => Promise<void>;
   updateUserBlockStatus: (userId: string, blocked: boolean) => Promise<void>;
+  updateUserLogoutStatus: (userId: string, disabled: boolean) => Promise<void>;
+  updateAllUsersLogoutStatus: (disabled: boolean) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -136,6 +140,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               pkrBalance: pkrBalance,
               referralCode: userData.referralCode,
               admin: userData.admin || false,
+              blocked: userData.blocked,
+              logoutDisabled: userData.logoutDisabled || false,
               lastClaimTimestamp: userData.lastClaimTimestamp || null,
               dailyStreakCount: userData.dailyStreakCount || 0,
               lastDailyClaim: userData.lastDailyClaim || null,
@@ -148,7 +154,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               jazzcashName: userData.jazzcashName,
               easypaisaNumber: userData.easypaisaNumber,
               easypaisaName: userData.easypaisaName,
-              blocked: userData.blocked,
             });
              setLoading(false);
           } else if (!docSnap.exists()){
@@ -245,6 +250,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         referredBy: referrerId,
         admin: false,
         blocked: false,
+        logoutDisabled: false,
         createdAt: serverTimestamp(),
         lastClaimTimestamp: null,
         dailyStreakCount: 0,
@@ -259,12 +265,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signup = useCallback(async (name: string, email: string, password?: string, referralCode?: string | null) => {
     if (!password) throw new Error("Password is required for email/password signup.");
     
-    // Step 1: Create the user in Firebase Auth.
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
     const fbUser = userCredential.user;
 
     try {
-        // Step 2: Now that user is authenticated, check for unique display name.
         const usersRef = collection(db, 'users');
         const q = query(usersRef, where('displayName', '==', name));
         const nameQuerySnapshot = await getDocs(q);
@@ -272,7 +276,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           throw new Error(`Username "${name}" is already taken. Please choose another one.`);
         }
 
-        // Step 3: Handle referral logic.
         let referred = false;
         let referrerId: string | null = null;
         const initialCoins = 200;
@@ -292,7 +295,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             }
         }
 
-        // Step 4: Update profile and create user document in Firestore.
         await updateProfile(fbUser, { displayName: name });
         
         const userDocRef = doc(db, 'users', fbUser.uid);
@@ -305,6 +307,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           referredBy: referrerId,
           admin: false,
           blocked: false,
+          logoutDisabled: false,
           createdAt: serverTimestamp(),
           lastClaimTimestamp: null,
           dailyStreakCount: 0,
@@ -313,18 +316,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         });
         await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
 
-        // Step 5: Send verification email.
         await sendEmailVerification(fbUser);
         return { referred };
     } catch(e) {
-        // If any of the DB operations or checks fail, we must delete the created user
-        // so they can try signing up again with the same email.
         await deleteUser(fbUser);
-        throw e; // re-throw the original error to be displayed to the user
+        throw e;
     }
   }, []);
 
   const logout = useCallback(async () => {
+    if (user?.logoutDisabled) {
+        toast({
+            variant: "destructive",
+            title: "Logout Disabled",
+            description: "Your ability to log out has been disabled by an administrator.",
+        });
+        return;
+    }
     try {
       await firebaseSignOut(auth);
     } catch (error: any) {
@@ -334,7 +342,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             description: error.message.replace('Firebase: ', ''),
         });
     }
-  }, [toast]);
+  }, [user, toast]);
 
   const claimHourlyReward = useCallback(async (amount: number) => {
     if (user) {
@@ -366,7 +374,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const userRef = doc(db, 'users', user.uid);
     const lastClaimDate = user.lastDailyClaim ? new Date(user.lastDailyClaim.seconds * 1000) : null;
     
-    // This check is now purely for the client-side UI, the rules prevent double-claiming
     if (lastClaimDate && isToday(lastClaimDate)) {
         throw new Error("Daily reward already claimed for today.");
     }
@@ -536,7 +543,33 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     await updateDoc(userRef, { blocked });
   }, [user]);
 
-  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds, updateUserBlockStatus };
+  const updateUserLogoutStatus = useCallback(async (userId: string, disabled: boolean) => {
+    if (!user?.admin) throw new Error("You are not authorized to perform this action.");
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, { logoutDisabled: disabled });
+  }, [user]);
+  
+  const updateAllUsersLogoutStatus = useCallback(async (disabled: boolean) => {
+    if (!user?.admin) throw new Error("You are not authorized to perform this action.");
+    
+    const usersRef = collection(db, 'users');
+    const q = query(usersRef, where("admin", "==", false));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+        toast({ title: "No users to update."});
+        return;
+    }
+
+    const batch = writeBatch(db);
+    querySnapshot.forEach((doc) => {
+        batch.update(doc.ref, { logoutDisabled: disabled });
+    });
+
+    await batch.commit();
+  }, [user, toast]);
+
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, withdrawPkr, giveBonus, updateWithdrawalDetails, transferFunds, updateUserBlockStatus, updateUserLogoutStatus, updateAllUsersLogoutStatus };
 
   return (
     <AuthContext.Provider value={value}>

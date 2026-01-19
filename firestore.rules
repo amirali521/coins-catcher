@@ -32,16 +32,21 @@ service cloud.firestore {
       allow update: if
         // SCENARIO 1: A user is updating their OWN profile (e.g., claiming rewards, changing settings).
         ( isOwner(userId)
-          // They are not allowed to change their admin status or unblock themselves.
+          // They are not allowed to change their admin status, or unblock/enable logout for themselves.
           && request.resource.data.admin == resource.data.admin
           && request.resource.data.blocked == resource.data.blocked
+          && request.resource.data.logoutDisabled == resource.data.logoutDisabled
         )
         // SCENARIO 2: ANOTHER user is updating this user's profile.
         || ( !isOwner(userId) && (
             // This is for receiving a transfer. Only the 'coins' field can be changed.
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coins'])
-            // OR, an admin is blocking/unblocking the user. Only 'blocked' can change.
-            || (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['blocked']))
+            // OR, an admin is changing status fields.
+            // This allows 'blocked', 'logoutDisabled', or both to be changed, but nothing else.
+            || (isAdmin() &&
+                (request.resource.data.diff(resource.data).affectedKeys() - ['blocked', 'logoutDisabled']).size() == 0 &&
+                request.resource.data.diff(resource.data).affectedKeys().size() > 0
+               )
           )
         );
 

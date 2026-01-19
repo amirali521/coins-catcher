@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -9,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
-import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon, Settings, LayoutDashboard, UserCog, Ban } from 'lucide-react';
+import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon, Settings, LayoutDashboard, UserCog, Ban, LogOut } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -23,6 +24,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatLargeNumber } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
 
 
 interface AppUser {
@@ -32,6 +34,7 @@ interface AppUser {
     coins: number;
     admin: boolean;
     blocked?: boolean;
+    logoutDisabled?: boolean;
     createdAt: { seconds: number; nanoseconds: number; } | null;
     referredBy?: string;
 }
@@ -446,8 +449,9 @@ export default function AdminPage() {
     const [users, setUsers] = useState<AppUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [bonusUser, setBonusUser] = useState<AppUser | null>(null);
+    const [isUpdatingAll, setIsUpdatingAll] = useState(false);
     const router = useRouter();
-    const { updateUserBlockStatus } = useAuth();
+    const { updateUserBlockStatus, updateUserLogoutStatus, updateAllUsersLogoutStatus } = useAuth();
     const { toast } = useToast();
 
     useEffect(() => {
@@ -488,12 +492,42 @@ export default function AdminPage() {
                 title: `User ${!user.blocked ? 'Blocked' : 'Unblocked'}`,
                 description: `${user.displayName} has been ${!user.blocked ? 'blocked' : 'unblocked'}.`,
             });
-            // Manually update the user state to reflect the change
             setUsers(prevUsers => prevUsers.map(u => u.uid === user.uid ? { ...u, blocked: !u.blocked } : u));
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Error', description: error.message });
         }
     }
+
+    const handleToggleLogout = async (userToUpdate: AppUser) => {
+        const newStatus = !userToUpdate.logoutDisabled;
+        try {
+            await updateUserLogoutStatus(userToUpdate.uid, newStatus);
+            toast({
+                title: `User Updated`,
+                description: `${userToUpdate.displayName}'s logout has been ${newStatus ? 'disabled' : 'enabled'}.`,
+            });
+            setUsers(prevUsers => prevUsers.map(u => u.uid === userToUpdate.uid ? { ...u, logoutDisabled: newStatus } : u));
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Error', description: error.message });
+        }
+    }
+
+    const handleMasterLogoutToggle = async (disable: boolean) => {
+        setIsUpdatingAll(true);
+        try {
+            await updateAllUsersLogoutStatus(disable);
+            toast({
+                title: "Bulk Update Successful",
+                description: `Logout has been ${disable ? 'disabled' : 'enabled'} for all non-admin users.`
+            });
+            setUsers(prevUsers => prevUsers.map(u => u.admin ? u : { ...u, logoutDisabled: disable }));
+        } catch (error: any) {
+            toast({ variant: 'destructive', title: 'Bulk Update Failed', description: error.message });
+        } finally {
+            setIsUpdatingAll(false);
+        }
+    }
+
 
     return (
         <div className="grid gap-6">
@@ -516,7 +550,31 @@ export default function AdminPage() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="users" className="mt-6">
+              <TabsContent value="users" className="mt-6 space-y-6">
+                 <Card>
+                    <CardHeader>
+                        <CardTitle>Master Controls</CardTitle>
+                        <CardDescription>Apply actions to all non-admin users at once.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="flex items-center gap-4">
+                        <Button 
+                            variant="destructive" 
+                            onClick={() => handleMasterLogoutToggle(true)}
+                            disabled={isUpdatingAll}
+                        >
+                            {isUpdatingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
+                            Disable Logout For All
+                        </Button>
+                        <Button 
+                            variant="secondary" 
+                            onClick={() => handleMasterLogoutToggle(false)}
+                            disabled={isUpdatingAll}
+                        >
+                            {isUpdatingAll ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LogOut className="mr-2 h-4 w-4" />}
+                            Enable Logout For All
+                        </Button>
+                    </CardContent>
+                </Card>
                  <Card>
                     <CardHeader>
                         <CardTitle>Users</CardTitle>
@@ -529,6 +587,7 @@ export default function AdminPage() {
                                     <TableHead>User</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead>Coins</TableHead>
+                                    <TableHead>Logout</TableHead>
                                     <TableHead>Joined</TableHead>
                                     <TableHead className="text-right">Actions</TableHead>
                                 </TableRow>
@@ -536,12 +595,12 @@ export default function AdminPage() {
                             <TableBody>
                                 {loading ? (
                                     <TableRow>
-                                        <TableCell colSpan={5} className="h-24 text-center">
+                                        <TableCell colSpan={6} className="h-24 text-center">
                                             <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
                                         </TableCell>
                                     </TableRow>
                                 ) : users.map((user) => (
-                                    <TableRow key={user.uid}>
+                                    <TableRow key={user.uid} className={user.logoutDisabled ? 'bg-muted/30' : ''}>
                                         <TableCell>
                                             <div className="flex items-center gap-3">
                                                 <Avatar>
@@ -566,6 +625,15 @@ export default function AdminPage() {
                                             )}
                                         </TableCell>
                                         <TableCell>{formatLargeNumber(user.coins)}</TableCell>
+                                        <TableCell>
+                                            {!user.admin && (
+                                                <Switch
+                                                    checked={!!user.logoutDisabled}
+                                                    onCheckedChange={() => handleToggleLogout(user)}
+                                                    aria-label="Toggle logout"
+                                                />
+                                            )}
+                                        </TableCell>
                                         <TableCell className="text-muted-foreground">
                                             {user.createdAt ? formatDistanceToNow(new Date(user.createdAt.seconds * 1000), { addSuffix: true }) : 'N/A'}
                                         </TableCell>
@@ -600,3 +668,4 @@ export default function AdminPage() {
     
 
     
+

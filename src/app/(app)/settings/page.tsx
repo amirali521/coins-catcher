@@ -1,3 +1,4 @@
+
 "use client";
 
 import { Button } from "@/components/ui/button";
@@ -282,10 +283,17 @@ export default function SettingsPage() {
                 <CardDescription>Manage your session.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                <Button variant="destructive" onClick={logout}>
-                    <LogOut className="mr-2 h-4 w-4" />
-                    Sign Out
-                </Button>
+                    <div className="flex flex-col items-start">
+                        <Button variant="destructive" onClick={logout} disabled={user?.logoutDisabled}>
+                            <LogOut className="mr-2 h-4 w-4" />
+                            Sign Out
+                        </Button>
+                        {user?.logoutDisabled && (
+                            <p className="text-xs text-destructive mt-2">
+                                Logout has been disabled by an administrator.
+                            </p>
+                        )}
+                    </div>
                 </CardContent>
             </Card>
         </TabsContent>
