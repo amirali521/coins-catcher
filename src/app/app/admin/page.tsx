@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
-import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon, Settings, LayoutDashboard, UserCog, Ban, LogOut, PackageCheck, PackageX, Banknote, Gamepad2, AlertTriangle } from 'lucide-react';
+import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon, Settings, LayoutDashboard, UserCog, Ban, LogOut, PackageCheck, PackageX, Banknote, Gamepad2, AlertTriangle, History } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -164,12 +164,12 @@ function RejectDialog({ request, isOpen, onClose }: { request: WithdrawalRequest
     )
 }
 
-function WithdrawalRequests() {
+function RecentTransactions() {
     const [requests, setRequests] = useState<WithdrawalRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const { toast } = useToast();
     const { approveWithdrawal } = useAuth();
-    const [activeTab, setActiveTab] = useState<'pending' | 'processed'>('pending');
+    const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
     const [rejectingRequest, setRejectingRequest] = useState<WithdrawalRequest | null>(null);
 
     useEffect(() => {
@@ -200,8 +200,8 @@ function WithdrawalRequests() {
     };
     
     const filteredRequests = requests.filter(r => {
-        if (activeTab === 'pending') return r.status === 'pending';
-        return r.status === 'approved' || r.status === 'rejected';
+        if (activeTab === 'all') return true;
+        return r.status === activeTab;
     });
 
     const getRequestTitle = (req: WithdrawalRequest) => {
@@ -212,12 +212,14 @@ function WithdrawalRequests() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Withdrawal Requests</CardTitle>
+                <CardTitle>Recent Transactions</CardTitle>
                 <CardDescription>Review and process user withdrawal and purchase requests.</CardDescription>
                  <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full pt-4">
-                    <TabsList>
+                    <TabsList className="grid w-full grid-cols-4">
+                        <TabsTrigger value="all">All</TabsTrigger>
                         <TabsTrigger value="pending">Pending</TabsTrigger>
-                        <TabsTrigger value="processed">Processed</TabsTrigger>
+                        <TabsTrigger value="approved">Approved</TabsTrigger>
+                        <TabsTrigger value="rejected">Rejected</TabsTrigger>
                     </TabsList>
                 </Tabs>
             </CardHeader>
@@ -793,7 +795,7 @@ export default function AdminPage() {
               <TabsList className="flex h-auto w-full flex-wrap justify-start">
                 <TabsTrigger value="overview"><LayoutDashboard className="mr-2 h-4 w-4"/> Overview</TabsTrigger>
                 <TabsTrigger value="users"><UserCog className="mr-2 h-4 w-4"/> User Management</TabsTrigger>
-                <TabsTrigger value="withdrawals"><Banknote className="mr-2 h-4 w-4" /> Withdrawal Requests</TabsTrigger>
+                <TabsTrigger value="withdrawals"><History className="mr-2 h-4 w-4" /> Recent Transactions</TabsTrigger>
                 <TabsTrigger value="settings"><Settings className="mr-2 h-4 w-4"/> Wallet Settings</TabsTrigger>
               </TabsList>
 
@@ -914,7 +916,7 @@ export default function AdminPage() {
               </TabsContent>
 
               <TabsContent value="withdrawals" className="mt-6">
-                <WithdrawalRequests />
+                <RecentTransactions />
               </TabsContent>
               
               <TabsContent value="settings" className="mt-6">
@@ -926,3 +928,4 @@ export default function AdminPage() {
         </div>
     );
 }
+
