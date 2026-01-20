@@ -243,25 +243,24 @@ export default function DashboardPage() {
   }
 
   const handleGameClaim = async () => {
-    const mainCoinsToAdd = Math.floor(gamePoints / 10);
+    const mainCoinsToAdd = Math.floor(gamePoints / 2);
     
     if (!gameAdClicked) {
       toast({ variant: 'destructive', title: 'Task not completed', description: 'Please click the link in Step 1 first.' });
       return;
     }
     if (mainCoinsToAdd <= 0) {
-      toast({ variant: 'destructive', title: 'Not enough points', description: 'You need at least 10 points to claim.' });
+      toast({ variant: 'destructive', title: 'Not enough points', description: 'You need at least 2 points to claim.' });
       return;
     }
 
     try {
-      // Re-using the same backend function, which is fine as it just adds coins.
       await claimTapTapReward(mainCoinsToAdd); 
       toast({
         title: '🎉 Game Reward Claimed!',
-        description: `You converted ${mainCoinsToAdd * 10} points into ${mainCoinsToAdd} main coins.`,
+        description: `You converted ${mainCoinsToAdd * 2} points into ${mainCoinsToAdd} main coins.`,
       });
-      setGamePoints(prev => prev % 10); // Keep the remainder
+      setGamePoints(prev => prev % 2); // Keep the remainder
       setGameAdClicked(false);
     } catch (error: any) {
       console.error("Failed to claim game reward:", error);
@@ -468,12 +467,10 @@ export default function DashboardPage() {
                        {gameButtons.map(button => (
                             <Button 
                                 key={button.id}
-                                variant={button.type === 'blast' ? 'destructive' : 'outline'}
+                                variant="ghost"
                                 size="icon"
                                 className={cn(
-                                    "absolute transition-all duration-300 transform-gpu animate-in fade-in zoom-in-50",
-                                    button.type === 'gold' && "border-yellow-400",
-                                    button.type === 'silver' && "border-gray-400"
+                                    "absolute transition-all duration-300 transform-gpu animate-in fade-in zoom-in-50 hover:scale-110 active:scale-95 hover:z-10",
                                 )}
                                 style={{
                                     top: `${button.y}%`,
@@ -483,16 +480,19 @@ export default function DashboardPage() {
                                 }}
                                 onClick={() => handleGameButtonClick(button.id, button.type)}
                             >
-                                {button.type === 'gold' && <Star className="h-6 w-6 text-yellow-400 fill-yellow-400" />}
-                                {button.type === 'silver' && <Star className="h-6 w-6 text-gray-400 fill-gray-400" />}
-                                {button.type === 'blast' && <Bomb className="h-6 w-6" />}
+                                {button.type === 'gold' && <Star className="h-8 w-8 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_5px_rgba(250,204,21,0.7)]" />}
+                                {button.type === 'silver' && <Star className="h-6 w-6 text-gray-400 fill-gray-400 drop-shadow-[0_0_5px_rgba(156,163,175,0.7)]" />}
+                                {button.type === 'blast' && <Bomb className="h-8 w-8 text-destructive" />}
                             </Button>
                        ))}
                     </div>
                 </CardContent>
                 <CardFooter className="flex-col gap-4 w-full max-w-sm border-t pt-6">
+                     <div className="text-sm text-muted-foreground font-semibold">
+                        Gold Star = 2 points. Silver Star = 1 point.
+                    </div>
                     <div className="text-sm text-muted-foreground font-semibold">
-                        10 Points = 1 Main Coin
+                        2 Points = 1 Main Coin
                     </div>
                     <Button
                         className="w-full"
@@ -505,11 +505,11 @@ export default function DashboardPage() {
                                 handleGameClaim();
                             }
                         }}
-                        disabled={gameAdClicked && gamePoints < 10}
+                        disabled={gameAdClicked && gamePoints < 2}
                     >
                         {!gameAdClicked
                             ? "Step 1: Open Link to Enable Claim"
-                            : `Step 2: Claim ${Math.floor(gamePoints / 10)} Main Coins`
+                            : `Step 2: Claim ${Math.floor(gamePoints / 2)} Main Coins`
                         }
                     </Button>
                 </CardFooter>
