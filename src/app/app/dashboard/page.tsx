@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Gift, Clock, Coins, CheckCircle, Hand, Gem } from "lucide-react";
+import { Gift, Clock, Coins, CheckCircle, Gamepad2, Star, Bomb } from "lucide-react";
 import { BannerAd } from "@/components/ads/banner-ad";
 import FaucetBannerAd from "@/components/ads/faucet-banner-ad";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -19,6 +19,15 @@ const FAUCET_CLAIM_COOLDOWN_HOURS = 3;
 const FAUCET_CLAIM_AMOUNT = 50;
 const DAILY_REWARDS = [15, 30, 45, 60, 75, 90, 120];
 
+// Game Types
+type GameButtonType = 'gold' | 'silver' | 'blast';
+interface GameButton {
+  id: number;
+  type: GameButtonType;
+  x: number;
+  y: number;
+}
+
 
 export default function DashboardPage() {
   const { user, claimHourlyReward, claimFaucetReward, claimDailyReward, claimTapTapReward } = useAuth();
@@ -26,6 +35,7 @@ export default function DashboardPage() {
   const [faucetPopoverOpen, setFaucetPopoverOpen] = useState(false);
   const [faucetAdClicked, setFaucetAdClicked] = useState(false);
 
+  // Core reward states
   const [hourlyTimeLeft, setHourlyTimeLeft] = useState<number | null>(null);
   const [canClaimHourly, setCanClaimHourly] = useState(false);
   const [hourlyAdLinkClicked, setHourlyAdLinkClicked] = useState(false);
@@ -33,11 +43,11 @@ export default function DashboardPage() {
   const [canClaimFaucet, setCanClaimFaucet] = useState(false);
   const [canClaimDaily, setCanClaimDaily] = useState(false);
 
-  const [tapTapCoins, setTapTapCoins] = useState(0);
-  const [isTapping, setIsTapping] = useState(false);
-  const [tapTapAdClicked, setTapTapAdClicked] = useState(false);
-  const tapTimestamps = useRef<number[]>([]);
-  const [isPenalized, setIsPenalized] = useState(false);
+  // New Game states
+  const [gamePoints, setGamePoints] = useState(0);
+  const [gameButtons, setGameButtons] = useState<GameButton[]>([]);
+  const [gameAdClicked, setGameAdClicked] = useState(false);
+  const gameBoardRef = useRef<HTMLDivElement>(null);
 
 
   const calculateCooldowns = useCallback(() => {
@@ -96,22 +106,47 @@ export default function DashboardPage() {
     return () => clearInterval(timer);
   }, [calculateCooldowns]);
 
-  // New logic to detect ad click via window blur
+  // Ad click detection for faucet
   useEffect(() => {
     const handleBlur = () => {
         if (faucetPopoverOpen) {
             setFaucetAdClicked(true);
         }
     };
-
     if (faucetPopoverOpen) {
         window.addEventListener('blur', handleBlur);
     }
-
     return () => {
         window.removeEventListener('blur', handleBlur);
     };
   }, [faucetPopoverOpen]);
+
+  // Game Loop
+  useEffect(() => {
+    const gameInterval = setInterval(() => {
+        if (gameButtons.length > 7) return; // Max 8 buttons on screen
+
+        const buttonType: GameButtonType = (['gold', 'silver', 'silver', 'silver', 'blast'] as GameButtonType[])[Math.floor(Math.random() * 5)];
+        
+        const newButton: GameButton = {
+            id: Date.now(),
+            type: buttonType,
+            x: Math.random() * 90,
+            y: Math.random() * 90,
+        };
+
+        setGameButtons(current => [...current, newButton]);
+
+        // Auto-remove button after 2.5 seconds
+        setTimeout(() => {
+            setGameButtons(current => current.filter(b => b.id !== newButton.id));
+        }, 2500);
+
+    }, 800); // New button every 0.8 seconds
+
+    return () => clearInterval(gameInterval);
+  }, [gameButtons.length]);
+
 
   const formatTime = (ms: number | null) => {
     if (ms === null || ms <= 0) return "00:00:00";
@@ -136,7 +171,7 @@ export default function DashboardPage() {
           title: "🎉 Reward Claimed!",
           description: `You have received ${HOURLY_CLAIM_AMOUNT} coins.`,
         });
-        setHourlyAdLinkClicked(false); // Reset after successful claim
+        setHourlyAdLinkClicked(false);
       } catch (error) {
         console.error("Failed to claim reward:", error);
         toast({
@@ -157,7 +192,6 @@ export default function DashboardPage() {
           description: `You have received ${FAUCET_CLAIM_AMOUNT} coins.`,
         });
         setFaucetPopoverOpen(false);
-         // Reset for next time after a short delay
         setTimeout(() => {
           setFaucetAdClicked(false);
         }, 100);
@@ -190,58 +224,47 @@ export default function DashboardPage() {
       }
   }
 
-  const handleTap = () => {
-    if (isPenalized) {
-      return;
+  // New Game Logic
+  const handleGameButtonClick = (id: number, type: GameButtonType) => {
+    setGameButtons(current => current.filter(b => b.id !== id));
+
+    if (type === 'gold') {
+        setGamePoints(p => p + 2);
+    } else if (type === 'silver') {
+        setGamePoints(p => p + 1);
+    } else if (type === 'blast') {
+        toast({
+            variant: 'destructive',
+            title: '💥 Ouch!',
+            description: 'You lost 10 points.'
+        });
+        setGamePoints(p => Math.max(0, p - 10));
     }
+  }
 
-    const now = Date.now();
-    // Remove timestamps older than 1 second
-    tapTimestamps.current = tapTimestamps.current.filter(ts => now - ts < 1000);
-
-    // Check if the tap limit is exceeded
-    if (tapTimestamps.current.length >= 8) {
-      toast({
-        variant: "destructive",
-        title: "Auto-clicker detected!",
-        description: "Tapping disabled for 3 seconds.",
-      });
-      setIsPenalized(true);
-      setTimeout(() => setIsPenalized(false), 3000);
-      return; // Do nothing, tap is ignored
-    }
-
-    // Add the new timestamp
-    tapTimestamps.current.push(now);
-
-    // Original tap logic
-    setIsTapping(true);
-    setTapTapCoins(c => c + 1);
-    setTimeout(() => setIsTapping(false), 150);
-  };
-
-  const handleTapTapClaim = async () => {
-    const mainCoinsToAdd = Math.floor(tapTapCoins / 20);
+  const handleGameClaim = async () => {
+    const mainCoinsToAdd = Math.floor(gamePoints / 10);
     
-    if (!tapTapAdClicked) {
+    if (!gameAdClicked) {
       toast({ variant: 'destructive', title: 'Task not completed', description: 'Please click the link in Step 1 first.' });
       return;
     }
     if (mainCoinsToAdd <= 0) {
-      toast({ variant: 'destructive', title: 'Not enough coins', description: 'You need at least 20 TapTap coins to claim.' });
+      toast({ variant: 'destructive', title: 'Not enough points', description: 'You need at least 10 points to claim.' });
       return;
     }
 
     try {
-      await claimTapTapReward(mainCoinsToAdd);
+      // Re-using the same backend function, which is fine as it just adds coins.
+      await claimTapTapReward(mainCoinsToAdd); 
       toast({
-        title: '🎉 TapTap Reward Claimed!',
-        description: `You converted ${mainCoinsToAdd * 20} TapTap Coins into ${mainCoinsToAdd} main coins.`,
+        title: '🎉 Game Reward Claimed!',
+        description: `You converted ${mainCoinsToAdd * 10} points into ${mainCoinsToAdd} main coins.`,
       });
-      setTapTapCoins(prev => prev % 20); // Keep the remainder
-      setTapTapAdClicked(false);
+      setGamePoints(prev => prev % 10); // Keep the remainder
+      setGameAdClicked(false);
     } catch (error: any) {
-      console.error("Failed to claim TapTap reward:", error);
+      console.error("Failed to claim game reward:", error);
       toast({
         variant: "destructive",
         title: "Claim Failed",
@@ -249,6 +272,7 @@ export default function DashboardPage() {
       });
     }
   };
+
 
   const currentStreak = user?.dailyStreakCount || 0;
   const lastDailyClaimDate = user?.lastDailyClaim ? new Date(user.lastDailyClaim.seconds * 1000) : null;
@@ -271,7 +295,7 @@ export default function DashboardPage() {
       <Tabs defaultValue="rewards" className="w-full col-span-full">
         <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="rewards"><Gift className="mr-2 h-4 w-4" />Main Rewards</TabsTrigger>
-            <TabsTrigger value="taptap"><Hand className="mr-2 h-4 w-4" />TapTap Miner</TabsTrigger>
+            <TabsTrigger value="game"><Gamepad2 className="mr-2 h-4 w-4" />Coin Catcher</TabsTrigger>
         </TabsList>
         
         <TabsContent value="rewards" className="mt-6">
@@ -426,54 +450,66 @@ export default function DashboardPage() {
             </div>
         </TabsContent>
         
-        <TabsContent value="taptap" className="mt-6">
+        <TabsContent value="game" className="mt-6">
             <Card className="flex flex-col items-center justify-center text-center">
                 <CardHeader>
-                    <CardTitle>TapTap Miner</CardTitle>
-                    <CardDescription>Tap the gem to mine TapTap Coins. Claim them to convert to main coins!</CardDescription>
+                    <CardTitle>Coin Catcher</CardTitle>
+                    <CardDescription>Click the gold and silver stars to earn points. Watch out for bombs!</CardDescription>
                 </CardHeader>
-                <CardContent className="flex flex-col items-center gap-6">
+                <CardContent className="flex flex-col items-center gap-4 w-full">
                     <div className="text-center">
                         <p className="text-7xl font-bold text-primary flex items-center justify-center gap-2">
-                            <Gem className="h-16 w-16" /> {formatLargeNumber(tapTapCoins)}
+                            {formatLargeNumber(gamePoints)}
                         </p>
-                        <p className="text-muted-foreground">TapTap Coins Mined</p>
+                        <p className="text-muted-foreground">Points Mined</p>
                     </div>
-                     <Button
-                        onClick={handleTap}
-                        variant="ghost"
-                        disabled={isPenalized}
-                        className={cn(
-                            "rounded-full h-48 w-48 relative transition-transform duration-100 ease-in-out",
-                            isTapping && !isPenalized && "scale-95"
-                        )}
-                    >
-                        <Gem className="h-40 w-40 text-primary drop-shadow-[0_0_15px_hsl(var(--primary)/0.5)]" />
-                        <span className="absolute text-3xl font-bold text-primary-foreground drop-shadow-lg">
-                           {isPenalized ? 'LOCKED' : 'TAP'}
-                        </span>
-                    </Button>
+
+                    <div ref={gameBoardRef} className="relative h-96 w-full max-w-lg bg-muted/20 rounded-lg border-2 border-dashed overflow-hidden">
+                       {gameButtons.map(button => (
+                            <Button 
+                                key={button.id}
+                                variant={button.type === 'blast' ? 'destructive' : 'outline'}
+                                size="icon"
+                                className={cn(
+                                    "absolute transition-all duration-300 transform-gpu animate-in fade-in zoom-in-50",
+                                    button.type === 'gold' && "border-yellow-400",
+                                    button.type === 'silver' && "border-gray-400"
+                                )}
+                                style={{
+                                    top: `${button.y}%`,
+                                    left: `${button.x}%`,
+                                    width: '48px',
+                                    height: '48px',
+                                }}
+                                onClick={() => handleGameButtonClick(button.id, button.type)}
+                            >
+                                {button.type === 'gold' && <Star className="h-6 w-6 text-yellow-400 fill-yellow-400" />}
+                                {button.type === 'silver' && <Star className="h-6 w-6 text-gray-400 fill-gray-400" />}
+                                {button.type === 'blast' && <Bomb className="h-6 w-6" />}
+                            </Button>
+                       ))}
+                    </div>
                 </CardContent>
                 <CardFooter className="flex-col gap-4 w-full max-w-sm border-t pt-6">
                     <div className="text-sm text-muted-foreground font-semibold">
-                        20 TapTap Coins = 1 Main Coin
+                        10 Points = 1 Main Coin
                     </div>
                     <Button
                         className="w-full"
-                        variant={!tapTapAdClicked ? "outline" : "default"}
+                        variant={!gameAdClicked ? "outline" : "default"}
                         onClick={() => {
-                            if (!tapTapAdClicked) {
+                            if (!gameAdClicked) {
                                 window.open('https://www.effectivegatecpm.com/rjxuuya9?key=0ca0a474faa38ad1b07174333d291e37', '_blank');
-                                setTapTapAdClicked(true);
+                                setGameAdClicked(true);
                             } else {
-                                handleTapTapClaim();
+                                handleGameClaim();
                             }
                         }}
-                        disabled={tapTapAdClicked && tapTapCoins < 20}
+                        disabled={gameAdClicked && gamePoints < 10}
                     >
-                        {!tapTapAdClicked
+                        {!gameAdClicked
                             ? "Step 1: Open Link to Enable Claim"
-                            : `Step 2: Claim ${Math.floor(tapTapCoins / 20)} Main Coins`
+                            : `Step 2: Claim ${Math.floor(gamePoints / 10)} Main Coins`
                         }
                     </Button>
                 </CardFooter>
