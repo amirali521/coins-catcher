@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -138,8 +139,8 @@ export default function DashboardPage() {
         const newButton: GameButton = {
             id: Date.now(),
             type: buttonType,
-            x: Math.random() * 80,
-            y: Math.random() * 80,
+            x: Math.random() * 85,
+            y: Math.random() * 85,
         };
 
         setGameButtons(current => [...current, newButton]);
@@ -485,22 +486,25 @@ export default function DashboardPage() {
                        {gameButtons.map(button => (
                             <Button 
                                 key={button.id}
-                                variant="ghost"
+                                variant="outline"
                                 size="icon"
                                 className={cn(
-                                    "absolute transition-all duration-300 transform-gpu animate-in fade-in zoom-in-50 hover:scale-110 active:scale-95 hover:z-10",
+                                    "absolute transition-all duration-300 transform-gpu animate-in fade-in zoom-in-50 hover:scale-110 active:scale-95 hover:z-10 h-14 w-14",
+                                    {
+                                        'border-yellow-400/50 hover:bg-yellow-400/10': button.type === 'gold',
+                                        'border-gray-400/50 hover:bg-gray-400/10': button.type === 'silver',
+                                        'border-destructive/50 hover:bg-destructive/10': button.type === 'blast',
+                                    }
                                 )}
                                 style={{
                                     top: `${button.y}%`,
                                     left: `${button.x}%`,
-                                    width: '320px',
-                                    height: '320px',
                                 }}
                                 onClick={() => handleGameButtonClick(button)}
                             >
-                                {button.type === 'gold' && <Star className="h-64 w-64 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_5px_rgba(250,204,21,0.7)]" />}
-                                {button.type === 'silver' && <Star className="h-48 w-48 text-gray-400 fill-gray-400 drop-shadow-[0_0_5px_rgba(156,163,175,0.7)]" />}
-                                {button.type === 'blast' && <Bomb className="h-64 w-64 text-destructive" />}
+                                {button.type === 'gold' && <Star className="h-8 w-8 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_5px_rgba(250,204,21,0.7)]" />}
+                                {button.type === 'silver' && <Star className="h-6 w-6 text-gray-400 fill-gray-400 drop-shadow-[0_0_5px_rgba(156,163,175,0.7)]" />}
+                                {button.type === 'blast' && <Bomb className="h-8 w-8 text-destructive" />}
                             </Button>
                        ))}
                        {clickEffects.map(effect => (
@@ -508,8 +512,8 @@ export default function DashboardPage() {
                               key={effect.id}
                               className={effect.type === 'blast' ? 'blast-effect' : 'sparkle-effect'}
                               style={{
-                                  top: `calc(${effect.y}% + 160px)`,
-                                  left: `calc(${effect.x}% + 160px)`,
+                                  top: `calc(${effect.y}% + 28px)`,
+                                  left: `calc(${effect.x}% + 28px)`,
                                   transform: 'translate(-50%, -50%)',
                               }}
                           />
@@ -548,3 +552,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
