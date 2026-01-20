@@ -255,9 +255,9 @@ export default function DashboardPage() {
         toast({
             variant: 'destructive',
             title: '💥 Ouch!',
-            description: 'You lost 10 points.'
+            description: 'You lost 2 points.'
         });
-        setGamePoints(p => Math.max(0, p - 10));
+        setGamePoints(p => Math.max(0, p - 2));
     }
   }
 
@@ -489,7 +489,7 @@ export default function DashboardPage() {
                                 variant="outline"
                                 size="icon"
                                 className={cn(
-                                    "absolute transition-all duration-300 transform-gpu animate-in fade-in zoom-in-50 hover:scale-110 active:scale-95 hover:z-10 h-14 w-14",
+                                    "absolute transition-all duration-300 transform-gpu animate-in fade-in zoom-in-50 hover:scale-110 active:scale-95 hover:z-10 h-10 w-10",
                                     {
                                         'border-yellow-400/50 hover:bg-yellow-400/10': button.type === 'gold',
                                         'border-gray-400/50 hover:bg-gray-400/10': button.type === 'silver',
@@ -502,9 +502,9 @@ export default function DashboardPage() {
                                 }}
                                 onClick={() => handleGameButtonClick(button)}
                             >
-                                {button.type === 'gold' && <Star className="h-8 w-8 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_5px_rgba(250,204,21,0.7)]" />}
-                                {button.type === 'silver' && <Star className="h-6 w-6 text-gray-400 fill-gray-400 drop-shadow-[0_0_5px_rgba(156,163,175,0.7)]" />}
-                                {button.type === 'blast' && <Bomb className="h-8 w-8 text-destructive" />}
+                                {button.type === 'gold' && <Star className="h-6 w-6 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_5px_rgba(250,204,21,0.7)]" />}
+                                {button.type === 'silver' && <Star className="h-5 w-5 text-gray-400 fill-gray-400 drop-shadow-[0_0_5px_rgba(156,163,175,0.7)]" />}
+                                {button.type === 'blast' && <Bomb className="h-6 w-6 text-destructive" />}
                             </Button>
                        ))}
                        {clickEffects.map(effect => (
@@ -512,8 +512,8 @@ export default function DashboardPage() {
                               key={effect.id}
                               className={effect.type === 'blast' ? 'blast-effect' : 'sparkle-effect'}
                               style={{
-                                  top: `calc(${effect.y}% + 28px)`,
-                                  left: `calc(${effect.x}% + 28px)`,
+                                  top: `calc(${effect.y}% + 20px)`,
+                                  left: `calc(${effect.x}% + 20px)`,
                                   transform: 'translate(-50%, -50%)',
                               }}
                           />
@@ -552,4 +552,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
