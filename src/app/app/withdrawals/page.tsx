@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from 'react';
@@ -186,15 +185,14 @@ export default function WithdrawalsPage() {
                                 <TableRow>
                                     <TableHead>User</TableHead>
                                     <TableHead>Request</TableHead>
-                                    <TableHead>Date</TableHead>
                                     <TableHead className="text-center">Status</TableHead>
                                 </TableRow>
                             </TableHeader>
                              <TableBody>
                                 {loading ? (
-                                    <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" /></TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={3} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" /></TableCell></TableRow>
                                 ) : filteredRequests.length === 0 ? (
-                                    <TableRow><TableCell colSpan={4} className="h-24 text-center">No {activeTab} requests found.</TableCell></TableRow>
+                                    <TableRow><TableCell colSpan={3} className="h-24 text-center">No {activeTab} requests found.</TableCell></TableRow>
                                 ) : (
                                     filteredRequests.map(req => (
                                         <TableRow key={req.id} className="cursor-pointer hover:bg-muted/50" onClick={() => setSelectedRequest(req)}>
@@ -209,9 +207,6 @@ export default function WithdrawalsPage() {
                                                     {req.type === 'pkr' ? <Banknote /> : <Gamepad2 />}
                                                     {getRequestTitle(req)}
                                                 </div>
-                                            </TableCell>
-                                            <TableCell className="text-muted-foreground">
-                                                {formatDistanceToNow(req.createdAt.seconds * 1000, { addSuffix: true })}
                                             </TableCell>
                                             <TableCell className="text-center">
                                                  {req.status === 'approved' && <CheckCircle className="h-6 w-6 text-green-500 mx-auto" />}
