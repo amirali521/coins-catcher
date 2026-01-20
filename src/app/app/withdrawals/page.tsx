@@ -6,9 +6,8 @@ import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '@/firebase/init';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
-import { Loader2, Banknote, Gamepad2, PackageCheck, PackageX, AlertTriangle, ListFilter } from 'lucide-react';
+import { Loader2, Banknote, Gamepad2, AlertTriangle, ListFilter, CheckCircle, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from '@/lib/utils';
@@ -96,7 +95,7 @@ export default function WithdrawalsPage() {
                                     <TableHead>User</TableHead>
                                     <TableHead>Request</TableHead>
                                     <TableHead>Date</TableHead>
-                                    <TableHead className="text-right">Status</TableHead>
+                                    <TableHead className="text-center">Status</TableHead>
                                 </TableRow>
                             </TableHeader>
                              <TableBody>
@@ -119,22 +118,20 @@ export default function WithdrawalsPage() {
                                                     {getRequestTitle(req)}
                                                 </div>
                                                 <div className="text-sm text-muted-foreground">{req.coinAmount.toLocaleString()} coins</div>
-                                            </TableCell>
-                                            <TableCell className="text-muted-foreground">
-                                                {formatDistanceToNow(req.createdAt.seconds * 1000, { addSuffix: true })}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                 <Badge variant={req.status === 'approved' ? 'secondary' : req.status === 'rejected' ? 'destructive' : 'outline'} className="capitalize flex gap-2">
-                                                    {req.status === 'approved' && <PackageCheck className="h-4 w-4"/>}
-                                                    {req.status === 'rejected' && <PackageX className="h-4 w-4"/>}
-                                                    {req.status}
-                                                 </Badge>
-                                                 {req.status === 'rejected' && req.rejectionReason && (
-                                                    <p className="text-xs text-destructive mt-1 flex items-start justify-end gap-1 text-right">
+                                                {req.status === 'rejected' && req.rejectionReason && (
+                                                    <p className="text-xs text-destructive mt-1 flex items-start gap-1">
                                                         <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
                                                         {req.rejectionReason}
                                                     </p>
                                                  )}
+                                            </TableCell>
+                                            <TableCell className="text-muted-foreground">
+                                                {formatDistanceToNow(req.createdAt.seconds * 1000, { addSuffix: true })}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                 {req.status === 'approved' && <CheckCircle className="h-6 w-6 text-green-500 mx-auto" />}
+                                                 {req.status === 'rejected' && <XCircle className="h-6 w-6 text-red-500 mx-auto" />}
+                                                 {req.status === 'pending' && <Loader2 className="h-6 w-6 animate-spin text-yellow-500 mx-auto" />}
                                             </TableCell>
                                         </TableRow>
                                     ))
