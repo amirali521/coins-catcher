@@ -993,7 +993,7 @@ export default function AdminPage() {
                         <CardTitle>Master Controls</CardTitle>
                         <CardDescription>Apply actions to all non-admin users at once.</CardDescription>
                     </CardHeader>
-                    <CardContent className="flex items-center gap-4">
+                    <CardContent className="flex flex-col items-start gap-2">
                         <Button 
                             variant="destructive" 
                             onClick={() => handleMasterLogoutToggle(true)}
@@ -1080,3 +1080,4 @@ export default function AdminPage() {
         </div>
     );
 }
+
