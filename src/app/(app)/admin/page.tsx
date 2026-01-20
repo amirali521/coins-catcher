@@ -15,6 +15,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/lib/auth';
@@ -393,6 +394,92 @@ function BonusDialog({ user, isOpen, onClose }: { user: AppUser | null, isOpen: 
     )
 }
 
+function UserDetailsDialog({ user, isOpen, onClose, onGiveBonus, onToggleBlock, onToggleLogout }: { 
+    user: AppUser | null; 
+    isOpen: boolean; 
+    onClose: () => void;
+    onGiveBonus: (user: AppUser) => void;
+    onToggleBlock: (user: AppUser) => void;
+    onToggleLogout: (user: AppUser) => void;
+}) {
+    if (!user) return null;
+
+    const getInitials = (name: string | null) => {
+        if (!name) return "U";
+        return name.split(" ").map((n) => n[0]).join("");
+    };
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader className="flex-row items-center gap-4">
+                     <Avatar className="h-12 w-12">
+                        <AvatarImage src={`https://avatar.vercel.sh/${user.uid}.png`} alt={user.displayName} />
+                        <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
+                    </Avatar>
+                    <div>
+                        <DialogTitle>{user.displayName || 'N/A'}</DialogTitle>
+                        <DialogDescription>{user.email}</DialogDescription>
+                    </div>
+                </DialogHeader>
+                <div className="grid gap-4 py-4">
+                    <div className="grid grid-cols-3 items-center gap-4">
+                        <Label>User ID</Label>
+                        <Input value={user.uid} readOnly className="font-mono text-xs col-span-2" />
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-4">
+                        <Label>Status</Label>
+                        <div className="col-span-2">
+                            {user.blocked ? (
+                                <Badge variant="destructive">Blocked</Badge>
+                            ) : user.admin ? (
+                                <Badge>Admin</Badge>
+                            ) : (
+                                <Badge variant="secondary">User</Badge>
+                            )}
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-4">
+                        <Label>Coins</Label>
+                        <span className="col-span-2">{formatLargeNumber(user.coins)}</span>
+                    </div>
+                    <div className="grid grid-cols-3 items-center gap-4">
+                        <Label>Joined</Label>
+                        <span className="text-sm text-muted-foreground col-span-2">
+                            {user.createdAt ? formatDistanceToNow(new Date(user.createdAt.seconds * 1000), { addSuffix: true }) : 'N/A'}
+                        </span>
+                    </div>
+                </div>
+                 {!user.admin && (
+                    <DialogFooter className="sm:justify-between gap-2 border-t pt-4">
+                        <div className="flex items-center space-x-2">
+                             <Switch
+                                id="logout-toggle"
+                                checked={!!user.logoutDisabled}
+                                onCheckedChange={() => onToggleLogout(user)}
+                                aria-label="Toggle logout"
+                            />
+                            <Label htmlFor="logout-toggle" className={cn("text-sm", user.logoutDisabled ? 'text-destructive' : 'text-muted-foreground')}>
+                                {user.logoutDisabled ? 'Logout Disabled' : 'Logout Enabled'}
+                            </Label>
+                        </div>
+                        <div className="flex gap-2">
+                             <Button variant="ghost" size="sm" onClick={() => { onClose(); onGiveBonus(user); }}>
+                                <Gift className="mr-2 h-4 w-4" />
+                                Bonus
+                            </Button>
+                            <Button variant={user.blocked ? 'secondary' : 'destructive'} size="sm" onClick={() => onToggleBlock(user)}>
+                                <Ban className="mr-2 h-4 w-4" />
+                                {user.blocked ? 'Unblock' : 'Block'}
+                            </Button>
+                        </div>
+                    </DialogFooter>
+                 )}
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 function WalletSettings() {
     const { toast } = useToast();
     const [loading, setLoading] = useState(true);
@@ -703,6 +790,7 @@ export default function AdminPage() {
     const [users, setUsers] = useState<AppUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [bonusUser, setBonusUser] = useState<AppUser | null>(null);
+    const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
     const [isUpdatingAll, setIsUpdatingAll] = useState(false);
     const { updateUserBlockStatus, updateUserLogoutStatus, updateAllUsersLogoutStatus } = useAuth();
     const { toast } = useToast();
@@ -745,7 +833,8 @@ export default function AdminPage() {
                 title: `User ${!user.blocked ? 'Blocked' : 'Unblocked'}`,
                 description: `${user.displayName} has been ${!user.blocked ? 'blocked' : 'unblocked'}.`,
             });
-            await fetchUsers(); // Re-fetch to get the latest state
+            setSelectedUser(prev => prev ? { ...prev, blocked: !user.blocked } : null);
+            setUsers(currentUsers => currentUsers.map(u => u.uid === user.uid ? { ...u, blocked: !user.blocked } : u));
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Error', description: error.message });
         }
@@ -759,7 +848,8 @@ export default function AdminPage() {
                 title: `User Updated`,
                 description: `${userToUpdate.displayName}'s logout has been ${newStatus ? 'disabled' : 'enabled'}.`,
             });
-            await fetchUsers(); // Re-fetch
+            setSelectedUser(prev => prev ? { ...prev, logoutDisabled: newStatus } : null);
+            setUsers(currentUsers => currentUsers.map(u => u.uid === userToUpdate.uid ? { ...u, logoutDisabled: newStatus } : u));
         } catch (error: any) {
             toast({ variant: 'destructive', title: 'Error', description: error.message });
         }
@@ -832,29 +922,25 @@ export default function AdminPage() {
                  <Card>
                     <CardHeader>
                         <CardTitle>Users</CardTitle>
-                        <CardDescription>A list of all registered users.</CardDescription>
+                        <CardDescription>A list of all registered users. Click on a user to see details and manage them.</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <Table>
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>User</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Coins</TableHead>
-                                    <TableHead>Logout</TableHead>
-                                    <TableHead>Joined</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
+                                    <TableHead className="text-right">Joined</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {loading ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="h-24 text-center">
+                                        <TableCell colSpan={2} className="h-24 text-center">
                                             <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
                                         </TableCell>
                                     </TableRow>
                                 ) : users.map((user) => (
-                                    <TableRow key={user.uid} className={user.logoutDisabled ? 'bg-muted/30' : ''}>
+                                    <TableRow key={user.uid} onClick={() => setSelectedUser(user)} className="cursor-pointer">
                                         <TableCell>
                                             <div className="flex items-center gap-3">
                                                 <Avatar>
@@ -862,48 +948,13 @@ export default function AdminPage() {
                                                     <AvatarFallback>{getInitials(user.displayName)}</AvatarFallback>
                                                 </Avatar>
                                                 <div>
-                                                    <p className="font-medium flex items-center gap-2">
-                                                        {user.displayName || 'N/A'}
-                                                    </p>
+                                                    <p className="font-medium">{user.displayName || 'N/A'}</p>
                                                     <p className="text-sm text-muted-foreground">{user.email}</p>
                                                 </div>
                                             </div>
                                         </TableCell>
-                                        <TableCell>
-                                            {user.blocked ? (
-                                                <Badge variant="destructive">Blocked</Badge>
-                                            ) : user.admin ? (
-                                                <Badge>Admin</Badge>
-                                            ) : (
-                                                <Badge variant="secondary">User</Badge>
-                                            )}
-                                        </TableCell>
-                                        <TableCell>{formatLargeNumber(user.coins)}</TableCell>
-                                        <TableCell>
-                                            {!user.admin && (
-                                                <Switch
-                                                    checked={!!user.logoutDisabled}
-                                                    onCheckedChange={() => handleToggleLogout(user)}
-                                                    aria-label="Toggle logout"
-                                                />
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-muted-foreground">
+                                        <TableCell className="text-right text-muted-foreground">
                                             {user.createdAt ? formatDistanceToNow(new Date(user.createdAt.seconds * 1000), { addSuffix: true }) : 'N/A'}
-                                        </TableCell>
-                                        <TableCell className="text-right space-x-2">
-                                            {!user.admin && (
-                                                <>
-                                                    <Button variant="ghost" size="sm" onClick={() => setBonusUser(user)}>
-                                                        <Gift className="mr-2 h-4 w-4" />
-                                                        Bonus
-                                                    </Button>
-                                                    <Button variant={user.blocked ? 'secondary' : 'destructive'} size="sm" onClick={() => handleToggleBlock(user)}>
-                                                        <Ban className="mr-2 h-4 w-4" />
-                                                        {user.blocked ? 'Unblock' : 'Block'}
-                                                    </Button>
-                                                </>
-                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -923,8 +974,14 @@ export default function AdminPage() {
             </Tabs>
             
             <BonusDialog user={bonusUser} isOpen={!!bonusUser} onClose={() => setBonusUser(null)} />
+            <UserDetailsDialog 
+                user={selectedUser} 
+                isOpen={!!selectedUser} 
+                onClose={() => setSelectedUser(null)}
+                onGiveBonus={(user) => setBonusUser(user)}
+                onToggleBlock={handleToggleBlock}
+                onToggleLogout={handleToggleLogout}
+            />
         </div>
     );
 }
-
-    
