@@ -131,8 +131,8 @@ export default function DashboardPage() {
         const newButton: GameButton = {
             id: Date.now(),
             type: buttonType,
-            x: Math.random() * 90,
-            y: Math.random() * 90,
+            x: Math.random() * 80,
+            y: Math.random() * 80,
         };
 
         setGameButtons(current => [...current, newButton]);
@@ -475,14 +475,14 @@ export default function DashboardPage() {
                                 style={{
                                     top: `${button.y}%`,
                                     left: `${button.x}%`,
-                                    width: '56px',
-                                    height: '56px',
+                                    width: '112px',
+                                    height: '112px',
                                 }}
                                 onClick={() => handleGameButtonClick(button.id, button.type)}
                             >
-                                {button.type === 'gold' && <Star className="h-10 w-10 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_5px_rgba(250,204,21,0.7)]" />}
-                                {button.type === 'silver' && <Star className="h-8 w-8 text-gray-400 fill-gray-400 drop-shadow-[0_0_5px_rgba(156,163,175,0.7)]" />}
-                                {button.type === 'blast' && <Bomb className="h-10 w-10 text-destructive" />}
+                                {button.type === 'gold' && <Star className="h-20 w-20 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_5px_rgba(250,204,21,0.7)]" />}
+                                {button.type === 'silver' && <Star className="h-16 w-16 text-gray-400 fill-gray-400 drop-shadow-[0_0_5px_rgba(156,163,175,0.7)]" />}
+                                {button.type === 'blast' && <Bomb className="h-20 w-20 text-destructive" />}
                             </Button>
                        ))}
                     </div>
