@@ -2,7 +2,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { collection, query, orderBy, doc, getDoc, getDocs, onSnapshot, limit, setDoc } from 'firebase/firestore';
+import { collection, query, orderBy, doc, getDoc, getDocs, onSnapshot, limit, setDoc, collectionGroup } from 'firebase/firestore';
 import { db } from '@/firebase/init';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -70,6 +70,13 @@ interface WithdrawalRequest {
   processedAt?: { seconds: number; nanoseconds: number; };
 }
 
+interface Transaction {
+  id: string;
+  type: string;
+  amount: number;
+  description: string;
+  date: { seconds: number; nanoseconds: number; };
+}
 
 const packageSchema = z.object({
     amount: z.number().min(1, "Amount must be positive"),
@@ -164,12 +171,12 @@ function RejectDialog({ request, isOpen, onClose }: { request: WithdrawalRequest
     )
 }
 
-function RecentTransactions() {
+function WithdrawalRequests() {
     const [requests, setRequests] = useState<WithdrawalRequest[]>([]);
     const [loading, setLoading] = useState(true);
     const { toast } = useToast();
     const { approveWithdrawal } = useAuth();
-    const [activeTab, setActiveTab] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
+    const [activeTab, setActiveTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
     const [rejectingRequest, setRejectingRequest] = useState<WithdrawalRequest | null>(null);
 
     useEffect(() => {
@@ -200,8 +207,9 @@ function RecentTransactions() {
     };
     
     const filteredRequests = requests.filter(r => {
-        if (activeTab === 'all') return true;
-        return r.status === activeTab;
+        if (activeTab === 'pending') return r.status === 'pending';
+        if(activeTab === 'approved') return r.status === 'approved'
+        return r.status === 'rejected';
     });
 
     const getRequestTitle = (req: WithdrawalRequest) => {
@@ -212,11 +220,10 @@ function RecentTransactions() {
     return (
         <Card>
             <CardHeader>
-                <CardTitle>Recent Transactions</CardTitle>
+                <CardTitle>Withdrawal Requests</CardTitle>
                 <CardDescription>Review and process user withdrawal and purchase requests.</CardDescription>
                  <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full pt-4">
-                    <TabsList className="grid w-full grid-cols-4">
-                        <TabsTrigger value="all">All</TabsTrigger>
+                    <TabsList className="grid w-full grid-cols-3">
                         <TabsTrigger value="pending">Pending</TabsTrigger>
                         <TabsTrigger value="approved">Approved</TabsTrigger>
                         <TabsTrigger value="rejected">Rejected</TabsTrigger>
@@ -313,6 +320,99 @@ function RecentTransactions() {
     );
 }
 
+interface GlobalTransaction extends Transaction {
+    user: {
+        uid: string;
+        displayName: string;
+    }
+}
+
+function AllTransactionsHistory({ allUsers, loading: loadingUsers }: { allUsers: AppUser[], loading: boolean }) {
+    const [transactions, setTransactions] = useState<GlobalTransaction[]>([]);
+    const [loading, setLoading] = useState(true);
+    const { toast } = useToast();
+
+    useEffect(() => {
+        if (loadingUsers) return;
+
+        setLoading(true);
+        const q = query(collectionGroup(db, 'transactions'), orderBy('date', 'desc'), limit(50));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const allTransactions: GlobalTransaction[] = snapshot.docs.map(doc => {
+                const data = doc.data() as Transaction;
+                const userId = doc.ref.parent.parent!.id;
+                const user = allUsers.find(u => u.uid === userId);
+                return {
+                    ...data,
+                    id: doc.id,
+                    user: {
+                        uid: userId,
+                        displayName: user?.displayName || 'Unknown User'
+                    }
+                };
+            });
+            setTransactions(allTransactions);
+            setLoading(false);
+        }, (error) => {
+            console.error("Error fetching all transactions:", error);
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not fetch transaction history.' });
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+
+    }, [toast, allUsers, loadingUsers]);
+
+
+    return (
+        <Card>
+            <CardHeader>
+                <CardTitle>Global Transaction History</CardTitle>
+                <CardDescription>A log of the most recent transactions across all users.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <ScrollArea className="h-[600px]">
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>User</TableHead>
+                                <TableHead>Description</TableHead>
+                                <TableHead>Amount</TableHead>
+                                <TableHead className="text-right">Date</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {loading ? (
+                                <TableRow><TableCell colSpan={4} className="h-24 text-center"><Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" /></TableCell></TableRow>
+                            ) : transactions.length === 0 ? (
+                                <TableRow><TableCell colSpan={4} className="h-24 text-center">No transactions found.</TableCell></TableRow>
+                            ) : (
+                                transactions.map(tx => (
+                                    <TableRow key={`${tx.id}-${tx.user.uid}`}>
+                                        <TableCell>
+                                            <div className="font-medium">{tx.user.displayName}</div>
+                                            <div className="text-sm text-muted-foreground font-mono">{tx.user.uid}</div>
+                                        </TableCell>
+                                        <TableCell className="font-medium capitalize">{tx.description}</TableCell>
+                                        <TableCell>
+                                             <Badge variant={tx.amount < 0 ? "destructive" : "secondary"}>
+                                                {tx.amount > 0 ? '+' : ''}{formatLargeNumber(tx.amount)}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-right text-muted-foreground">
+                                            {tx.date ? formatDistanceToNow(new Date(tx.date.seconds * 1000), { addSuffix: true }) : 'N/A'}
+                                        </TableCell>
+                                    </TableRow>
+                                ))
+                            )}
+                        </TableBody>
+                    </Table>
+                </ScrollArea>
+            </CardContent>
+        </Card>
+    );
+}
 
 function BonusDialog({ user, isOpen, onClose }: { user: AppUser | null, isOpen: boolean, onClose: () => void }) {
     const { toast } = useToast();
@@ -795,7 +895,8 @@ export default function AdminPage() {
               <TabsList className="flex h-auto w-full flex-wrap justify-start">
                 <TabsTrigger value="overview"><LayoutDashboard className="mr-2 h-4 w-4"/> Overview</TabsTrigger>
                 <TabsTrigger value="users"><UserCog className="mr-2 h-4 w-4"/> User Management</TabsTrigger>
-                <TabsTrigger value="withdrawals"><History className="mr-2 h-4 w-4" /> Recent Transactions</TabsTrigger>
+                <TabsTrigger value="withdrawals"><Banknote className="mr-2 h-4 w-4" /> Withdrawal Requests</TabsTrigger>
+                <TabsTrigger value="history"><History className="mr-2 h-4 w-4" /> All Transactions</TabsTrigger>
                 <TabsTrigger value="settings"><Settings className="mr-2 h-4 w-4"/> Wallet Settings</TabsTrigger>
               </TabsList>
 
@@ -916,7 +1017,10 @@ export default function AdminPage() {
               </TabsContent>
 
               <TabsContent value="withdrawals" className="mt-6">
-                <RecentTransactions />
+                <WithdrawalRequests />
+              </TabsContent>
+               <TabsContent value="history" className="mt-6">
+                <AllTransactionsHistory allUsers={users} loading={loading} />
               </TabsContent>
               
               <TabsContent value="settings" className="mt-6">
@@ -928,4 +1032,3 @@ export default function AdminPage() {
         </div>
     );
 }
-

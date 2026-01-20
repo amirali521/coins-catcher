@@ -51,7 +51,7 @@ service cloud.firestore {
       allow delete: if false;
 
       match /transactions/{transactionId} {
-        allow read, list: if isOwner(userId);
+        allow read, list: if isOwner(userId) || isAdmin();
         
         // Allow creating a transaction for oneself, or for another user if it's a credit.
         allow create: if isOwner(userId) || request.resource.data.amount > 0;
