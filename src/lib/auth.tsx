@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -410,7 +409,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       await updateDoc(userRef, {
         coins: increment(amount),
       });
-      await addTransaction(user.uid, 'claim', amount, 'TapTap Coin reward');
+      await addTransaction(user.uid, 'claim', amount, 'Coin Catcher reward');
     } else {
         throw new Error("User not authenticated.");
     }
@@ -458,25 +457,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (coinToPkrRate === null || coinToPkrRate <= 0) {
       throw new Error("Cannot process transaction: conversion rate is invalid.");
     }
-    
-    let details: any = {
-      packageAmount: payload.details.packageAmount,
-      withdrawalMethod: payload.details.withdrawalMethod,
-    }
-    
-    if (payload.type === 'pkr') {
-        if (!user.easypaisaNumber && !user.jazzcashNumber) throw new Error("Please set up a withdrawal method in your settings.");
-        details.accountName = payload.details.withdrawalMethod === 'Easypaisa' ? user.easypaisaName : user.jazzcashName;
-        details.accountNumber = payload.details.withdrawalMethod === 'Easypaisa' ? user.easypaisaNumber : user.jazzcashNumber;
-    } else if (payload.type === 'uc') {
-        if (!user.pubgId) throw new Error("Please add your PUBG ID in your settings.");
-        details.gameId = user.pubgId;
-        details.gameName = user.pubgName;
-    } else if (payload.type === 'diamond') {
-        if (!user.freefireId) throw new Error("Please add your FreeFire ID in your settings.");
-        details.gameId = user.freefireId;
-        details.gameName = user.freefireName;
-    }
 
     const coinsToDeduct = Math.ceil((payload.pkrAmount / coinToPkrRate) * 100000);
 
@@ -485,6 +465,39 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const userDoc = await transaction.get(userRef);
         if (!userDoc.exists() || userDoc.data().coins < coinsToDeduct) {
             throw new Error("Insufficient coin balance.");
+        }
+        
+        let requestDetails: any = {};
+        let transactionDescription = "";
+
+        if (payload.type === 'pkr') {
+            if (!user.easypaisaNumber && !user.jazzcashNumber) throw new Error("Please set up a withdrawal method in your settings.");
+            requestDetails = {
+                withdrawalMethod: payload.details.withdrawalMethod,
+                accountName: payload.details.withdrawalMethod === 'Easypaisa' ? user.easypaisaName : user.jazzcashName,
+                accountNumber: payload.details.withdrawalMethod === 'Easypaisa' ? user.easypaisaNumber : user.jazzcashNumber,
+            };
+            transactionDescription = `${payload.pkrAmount} PKR Withdrawal Request`;
+        } else if (payload.type === 'uc') {
+            if (!user.pubgId) throw new Error("Please add your PUBG ID in your settings.");
+            requestDetails = {
+                packageAmount: payload.details.packageAmount,
+                withdrawalMethod: 'PUBG',
+                gameId: user.pubgId,
+                gameName: user.pubgName,
+            };
+            transactionDescription = `Purchase Request for ${payload.details.packageAmount} UC`;
+        } else if (payload.type === 'diamond') {
+             if (!user.freefireId) throw new Error("Please add your FreeFire ID in your settings.");
+             requestDetails = {
+                packageAmount: payload.details.packageAmount,
+                withdrawalMethod: 'FreeFire',
+                gameId: user.freefireId,
+                gameName: user.freefireName,
+            };
+            transactionDescription = `Purchase Request for ${payload.details.packageAmount} Diamonds`;
+        } else {
+            throw new Error("Invalid withdrawal type.");
         }
         
         transaction.update(userRef, { coins: increment(-coinsToDeduct) });
@@ -498,13 +511,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             type: payload.type,
             pkrAmount: payload.pkrAmount,
             coinAmount: coinsToDeduct,
-            details,
+            details: requestDetails,
             createdAt: serverTimestamp(),
         });
-        
-        const transactionDescription = payload.type === 'pkr' 
-            ? `${payload.pkrAmount} PKR Withdrawal Request` 
-            : `Purchase Request for ${payload.details.packageAmount} ${payload.type.toUpperCase()}`;
 
         const transactionsRef = doc(collection(db, 'users', user.uid, 'transactions'));
         transaction.set(transactionsRef, {
@@ -514,7 +523,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
             date: serverTimestamp(),
         });
     });
-
   }, [user, coinToPkrRate]);
   
 
