@@ -9,22 +9,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Badge } from "@/components/ui/badge";
 import { useAuth, WithdrawalRequestPayload } from "@/lib/auth";
-import { Coins, ArrowUpCircle, ArrowDownCircle, Loader2, Wallet as WalletIcon, ArrowRightLeft, ShoppingBag, History } from "lucide-react";
+import { Coins, Loader2, Wallet as WalletIcon, ArrowRightLeft, ShoppingBag } from "lucide-react";
 import { useEffect, useState } from "react";
-import { collection, onSnapshot, orderBy, query, doc, getDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/firebase/init";
-import { formatDistanceToNow } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,16 +23,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { formatLargeNumber } from "@/lib/utils";
-
-interface Transaction {
-  id: string;
-  type: string;
-  amount: number;
-  description: string;
-  date: { seconds: number; nanoseconds: number; };
-}
 
 interface Package {
     amount: number;
@@ -452,38 +433,6 @@ function TransferCard() {
 
 export default function WalletPage() {
   const { user } = useAuth();
-  const { toast } = useToast();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!user?.uid) {
-      setLoading(false);
-      return;
-    };
-
-    const transRef = collection(db, 'users', user.uid, 'transactions');
-    const q = query(transRef, orderBy('date', 'desc'));
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const userTransactions: Transaction[] = [];
-      snapshot.forEach(doc => {
-        userTransactions.push({ id: doc.id, ...doc.data() } as Transaction);
-      });
-      setTransactions(userTransactions);
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching transactions:", error);
-      toast({
-        variant: "destructive",
-        title: "Error",
-        description: "Could not fetch transaction history."
-      });
-      setLoading(false);
-    });
-
-    return () => unsubscribe();
-  }, [user, toast]);
 
   return (
     <div className="grid gap-6">
@@ -497,7 +446,6 @@ export default function WalletPage() {
           <TabsTrigger value="overview"><WalletIcon className="mr-2 h-4 w-4" /> Overview</TabsTrigger>
           <TabsTrigger value="transfer"><ArrowRightLeft className="mr-2 h-4 w-4" /> Transfer</TabsTrigger>
           <TabsTrigger value="purchase"><ShoppingBag className="mr-2 h-4 w-4" /> Withdraw & Purchase</TabsTrigger>
-          <TabsTrigger value="history"><History className="mr-2 h-4 w-4" /> History</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="mt-6">
@@ -535,60 +483,6 @@ export default function WalletPage() {
 
         <TabsContent value="purchase" className="mt-6">
             <WalletActions />
-        </TabsContent>
-
-        <TabsContent value="history" className="mt-6">
-            <Card>
-                <CardHeader>
-                <CardTitle>Transaction History</CardTitle>
-                <CardDescription>A log of your recent earnings and spending.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                <ScrollArea className="h-96">
-                  <Table>
-                      <TableHeader>
-                      <TableRow>
-                          <TableHead>Description</TableHead>
-                          <TableHead>Amount</TableHead>
-                          <TableHead className="text-right">Date</TableHead>
-                      </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                      {loading ? (
-                          <TableRow>
-                          <TableCell colSpan={3} className="h-24 text-center">
-                              <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-                          </TableCell>
-                          </TableRow>
-                      ) : transactions.length > 0 ? (
-                          transactions.map((tx) => (
-                          <TableRow key={tx.id}>
-                              <TableCell className="font-medium capitalize flex items-center gap-2">
-                              {tx.amount < 0 ? <ArrowDownCircle className="h-4 w-4 text-red-500" /> : <ArrowUpCircle className="h-4 w-4 text-green-500" />}
-                              {tx.description}
-                              </TableCell>
-                              <TableCell>
-                              <Badge variant={tx.amount < 0 ? "destructive" : "secondary"}>
-                                  {tx.amount > 0 ? '+' : ''}{formatLargeNumber(tx.amount)}
-                              </Badge>
-                              </TableCell>
-                              <TableCell className="text-right text-muted-foreground">
-                              {tx.date ? formatDistanceToNow(new Date(tx.date.seconds * 1000), { addSuffix: true }) : 'N/A'}
-                              </TableCell>
-                          </TableRow>
-                          ))
-                      ) : (
-                          <TableRow>
-                          <TableCell colSpan={3} className="h-24 text-center text-muted-foreground">
-                              You have no transactions yet.
-                          </TableCell>
-                          </TableRow>
-                      )}
-                      </TableBody>
-                  </Table>
-                </ScrollArea>
-                </CardContent>
-            </Card>
         </TabsContent>
       </Tabs>
     </div>
