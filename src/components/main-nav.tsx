@@ -8,12 +8,13 @@ import {
   SidebarMenuItem,
   SidebarMenuButton,
 } from '@/components/ui/sidebar';
-import { Gift, Settings, Wallet, Shield, UserPlus, History } from 'lucide-react';
+import { Gift, Settings, Wallet, Shield, UserPlus, History, Banknote } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 
 const links = [
   { href: '/app/dashboard', label: 'Dashboard', icon: Gift },
   { href: '/app/wallet', label: 'Wallet', icon: Wallet },
+  { href: '/app/withdrawals', label: 'Withdrawals', icon: Banknote },
   { href: '/app/history', label: 'History', icon: History },
   { href: '/app/referrals', label: 'Referrals', icon: UserPlus },
   { href: '/app/settings', label: 'Settings', icon: Settings },

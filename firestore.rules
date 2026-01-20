@@ -67,7 +67,7 @@ service cloud.firestore {
     }
 
     match /withdrawalRequests/{requestId} {
-      allow read, list: if isAdmin();
+      allow read, list: if request.auth != null;
       allow create: if request.auth.uid == request.resource.data.userId;
       allow update: if isAdmin();
       allow delete: if isAdmin();

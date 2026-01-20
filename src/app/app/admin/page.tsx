@@ -206,11 +206,7 @@ function WithdrawalRequests() {
         }
     };
     
-    const filteredRequests = requests.filter(r => {
-        if (activeTab === 'pending') return r.status === 'pending';
-        if(activeTab === 'approved') return r.status === 'approved'
-        return r.status === 'rejected';
-    });
+    const filteredRequests = requests.filter(r => r.status === activeTab);
 
     const getRequestTitle = (req: WithdrawalRequest) => {
         if (req.type === 'pkr') return `Withdraw ${req.pkrAmount} PKR`;
