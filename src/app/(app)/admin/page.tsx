@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { formatDistanceToNow } from 'date-fns';
-import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon, Settings, LayoutDashboard, UserCog, Ban, LogOut, PackageCheck, PackageX, Banknote, Gamepad2, AlertTriangle } from 'lucide-react';
+import { Loader2, PlusCircle, Save, Trash2, Gift, Award, Users as UsersIcon, Settings, LayoutDashboard, UserCog, Ban, LogOut, PackageCheck, PackageX, Banknote, Gamepad2, AlertTriangle, MinusCircle } from 'lucide-react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -90,6 +90,12 @@ const bonusFormSchema = z.object({
     reason: z.string().min(3, "Please provide a reason.").max(100),
 });
 type BonusForm = z.infer<typeof bonusFormSchema>;
+
+const deductionFormSchema = z.object({
+    amount: z.coerce.number().min(1, "Deduction amount must be positive."),
+    reason: z.string().min(3, "Please provide a reason.").max(100),
+});
+type DeductionForm = z.infer<typeof deductionFormSchema>;
 
 const rejectionFormSchema = z.object({
     reason: z.string().min(10, "Please provide a detailed reason for rejection.").max(200),
@@ -394,13 +400,95 @@ function BonusDialog({ user, isOpen, onClose }: { user: AppUser | null, isOpen: 
     )
 }
 
-function UserDetailsDialog({ user, isOpen, onClose, onGiveBonus, onToggleBlock, onToggleLogout }: { 
+function DeductDialog({ user, isOpen, onClose }: { user: AppUser | null, isOpen: boolean, onClose: () => void }) {
+    const { toast } = useToast();
+    const { deductCoins } = useAuth();
+
+    const form = useForm<DeductionForm>({
+        resolver: zodResolver(deductionFormSchema),
+        defaultValues: { amount: 100, reason: '' },
+    });
+
+    const onSubmit = async (data: DeductionForm) => {
+        if (!user) return;
+        try {
+            await deductCoins(user.uid, data.amount, data.reason);
+            toast({
+                title: "Coins Deducted!",
+                description: `${data.amount} coins have been deducted from ${user.displayName}.`
+            });
+            form.reset();
+            onClose();
+        } catch (error: any) {
+            toast({
+                variant: 'destructive',
+                title: 'Failed to Deduct Coins',
+                description: error.message
+            });
+        }
+    };
+    
+    if (!user) return null;
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onClose}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Deduct Coins from {user.displayName}</DialogTitle>
+                    <DialogDescription>
+                        This will remove coins directly from the user's balance and create a transaction record.
+                    </DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                        <FormField
+                            control={form.control}
+                            name="amount"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Coin Amount to Deduct</FormLabel>
+                                    <FormControl>
+                                        <Input type="number" placeholder="e.g., 500" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                         <FormField
+                            control={form.control}
+                            name="reason"
+                            render={({ field }) => (
+                                <FormItem>
+                                    <FormLabel>Reason</FormLabel>
+                                    <FormControl>
+                                        <Textarea placeholder="e.g., Rule violation" {...field} />
+                                    </FormControl>
+                                    <FormMessage />
+                                </FormItem>
+                            )}
+                        />
+                        <DialogFooter>
+                            <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+                            <Button type="submit" variant="destructive" disabled={form.formState.isSubmitting}>
+                                {form.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Confirm Deduction
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+function UserDetailsDialog({ user, isOpen, onClose, onGiveBonus, onToggleBlock, onToggleLogout, onDeduct }: { 
     user: AppUser | null; 
     isOpen: boolean; 
     onClose: () => void;
     onGiveBonus: (user: AppUser) => void;
     onToggleBlock: (user: AppUser) => void;
     onToggleLogout: (user: AppUser) => void;
+    onDeduct: (user: AppUser) => void;
 }) {
     if (!user) return null;
 
@@ -467,6 +555,10 @@ function UserDetailsDialog({ user, isOpen, onClose, onGiveBonus, onToggleBlock, 
                              <Button variant="ghost" size="sm" onClick={() => { onClose(); onGiveBonus(user); }}>
                                 <Gift className="mr-2 h-4 w-4" />
                                 Bonus
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => { onClose(); onDeduct(user); }}>
+                                <MinusCircle className="mr-2 h-4 w-4" />
+                                Deduct
                             </Button>
                             <Button variant={user.blocked ? 'secondary' : 'destructive'} size="sm" onClick={() => onToggleBlock(user)}>
                                 <Ban className="mr-2 h-4 w-4" />
@@ -790,6 +882,7 @@ export default function AdminPage() {
     const [users, setUsers] = useState<AppUser[]>([]);
     const [loading, setLoading] = useState(true);
     const [bonusUser, setBonusUser] = useState<AppUser | null>(null);
+    const [deductUser, setDeductUser] = useState<AppUser | null>(null);
     const [selectedUser, setSelectedUser] = useState<AppUser | null>(null);
     const [isUpdatingAll, setIsUpdatingAll] = useState(false);
     const { updateUserBlockStatus, updateUserLogoutStatus, updateAllUsersLogoutStatus } = useAuth();
@@ -974,11 +1067,13 @@ export default function AdminPage() {
             </Tabs>
             
             <BonusDialog user={bonusUser} isOpen={!!bonusUser} onClose={() => setBonusUser(null)} />
+            <DeductDialog user={deductUser} isOpen={!!deductUser} onClose={() => setDeductUser(null)} />
             <UserDetailsDialog 
                 user={selectedUser} 
                 isOpen={!!selectedUser} 
                 onClose={() => setSelectedUser(null)}
                 onGiveBonus={(user) => setBonusUser(user)}
+                onDeduct={(user) => setDeductUser(user)}
                 onToggleBlock={handleToggleBlock}
                 onToggleLogout={handleToggleLogout}
             />

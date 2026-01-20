@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
@@ -71,6 +72,7 @@ interface AuthContextType {
   claimTapTapReward: (amount: number) => Promise<void>;
   requestWithdrawal: (payload: WithdrawalRequestPayload) => Promise<void>;
   giveBonus: (userId: string, amount: number, reason: string) => Promise<void>;
+  deductCoins: (userId: string, amount: number, reason: string) => Promise<void>;
   updateWithdrawalDetails: (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'jazzcashName' | 'easypaisaNumber' | 'easypaisaName'>>) => Promise<void>;
   transferFunds: (recipientId: string, amount: number, currency: 'coins' | 'pkr') => Promise<void>;
   updateUserBlockStatus: (userId: string, blocked: boolean) => Promise<void>;
@@ -305,7 +307,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
         const usersRef = collection(db, 'users');
         const q = query(usersRef, where('displayName', '==', name));
-        const nameQuerySnapshot = await getDocs(q);
+        const nameQuerySnapshot = await getDocs(qName);
         if (!nameQuerySnapshot.empty) {
           throw new Error(`Username "${name}" is already taken. Please choose another one.`);
         }
@@ -634,6 +636,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
   }, [user]);
 
+  const deductCoins = useCallback(async (userId: string, amount: number, reason: string) => {
+    if (!user?.admin) {
+        throw new Error("You must be an admin to perform this action.");
+    }
+    if (amount <= 0) {
+        throw new Error("Deduction amount must be positive.");
+    }
+    try {
+        await runTransaction(db, async (t) => {
+            const userRef = doc(db, 'users', userId);
+            const userDoc = await t.get(userRef);
+            if (!userDoc.exists()) {
+                throw new Error("User not found.");
+            }
+
+            if (userDoc.data().coins < amount) {
+              throw new Error("User does not have enough coins for this deduction.");
+            }
+            
+            t.update(userRef, { coins: increment(-amount) });
+
+            const transactionRef = doc(collection(db, 'users', userId, 'transactions'));
+            t.set(transactionRef, {
+                type: 'deduction',
+                amount: -amount,
+                description: `Admin Deduction: ${reason}`,
+                date: new Date(), 
+            });
+        });
+    } catch (e: any) {
+        throw new Error(e.message || "Deduction transaction failed.");
+    }
+  }, [user]);
+
   const updateWithdrawalDetails = useCallback(async (details: Partial<Pick<User, 'pubgId' | 'pubgName' | 'freefireId' | 'freefireName' | 'jazzcashNumber' | 'jazzcashName' | 'easypaisaNumber' | 'easypaisaName'>>) => {
     if (!user) throw new Error("User not authenticated.");
     const userRef = doc(db, 'users', user.uid);
@@ -709,7 +745,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     }, [user]);
 
-  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, claimTapTapReward, requestWithdrawal, giveBonus, updateWithdrawalDetails, transferFunds, updateUserBlockStatus, updateUserLogoutStatus, updateAllUsersLogoutStatus, approveWithdrawal, rejectWithdrawal };
+  const value = { user, firebaseUser, loading, login, signup, logout, signInWithGoogle, sendVerificationEmail, sendPasswordResetEmail, claimHourlyReward, claimFaucetReward, claimDailyReward, claimTapTapReward, requestWithdrawal, giveBonus, deductCoins, updateWithdrawalDetails, transferFunds, updateUserBlockStatus, updateUserLogoutStatus, updateAllUsersLogoutStatus, approveWithdrawal, rejectWithdrawal };
 
   return (
     <AuthContext.Provider value={value}>
@@ -725,3 +761,4 @@ export const useAuth = () => {
   }
   return context;
 };
+
