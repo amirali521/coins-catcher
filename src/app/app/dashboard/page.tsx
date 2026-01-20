@@ -27,6 +27,12 @@ interface GameButton {
   x: number;
   y: number;
 }
+interface ClickEffect {
+  id: number;
+  x: number;
+  y: number;
+  type: GameButtonType;
+}
 
 
 export default function DashboardPage() {
@@ -47,6 +53,7 @@ export default function DashboardPage() {
   const [gamePoints, setGamePoints] = useState(0);
   const [gameButtons, setGameButtons] = useState<GameButton[]>([]);
   const [gameAdClicked, setGameAdClicked] = useState(false);
+  const [clickEffects, setClickEffects] = useState<ClickEffect[]>([]);
   const gameBoardRef = useRef<HTMLDivElement>(null);
 
 
@@ -225,14 +232,25 @@ export default function DashboardPage() {
   }
 
   // New Game Logic
-  const handleGameButtonClick = (id: number, type: GameButtonType) => {
-    setGameButtons(current => current.filter(b => b.id !== id));
+  const handleGameButtonClick = (button: GameButton) => {
+    setGameButtons(current => current.filter(b => b.id !== button.id));
 
-    if (type === 'gold') {
+    const newEffect: ClickEffect = {
+      id: Date.now(),
+      x: button.x,
+      y: button.y,
+      type: button.type,
+    };
+    setClickEffects(current => [...current, newEffect]);
+    setTimeout(() => {
+      setClickEffects(current => current.filter(e => e.id !== newEffect.id));
+    }, 500);
+
+    if (button.type === 'gold') {
         setGamePoints(p => p + 2);
-    } else if (type === 'silver') {
+    } else if (button.type === 'silver') {
         setGamePoints(p => p + 1);
-    } else if (type === 'blast') {
+    } else if (button.type === 'blast') {
         toast({
             variant: 'destructive',
             title: '💥 Ouch!',
@@ -475,16 +493,27 @@ export default function DashboardPage() {
                                 style={{
                                     top: `${button.y}%`,
                                     left: `${button.x}%`,
-                                    width: '160px',
-                                    height: '160px',
+                                    width: '320px',
+                                    height: '320px',
                                 }}
-                                onClick={() => handleGameButtonClick(button.id, button.type)}
+                                onClick={() => handleGameButtonClick(button)}
                             >
-                                {button.type === 'gold' && <Star className="h-32 w-32 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_5px_rgba(250,204,21,0.7)]" />}
-                                {button.type === 'silver' && <Star className="h-24 w-24 text-gray-400 fill-gray-400 drop-shadow-[0_0_5px_rgba(156,163,175,0.7)]" />}
-                                {button.type === 'blast' && <Bomb className="h-32 w-32 text-destructive" />}
+                                {button.type === 'gold' && <Star className="h-64 w-64 text-yellow-400 fill-yellow-400 drop-shadow-[0_0_5px_rgba(250,204,21,0.7)]" />}
+                                {button.type === 'silver' && <Star className="h-48 w-48 text-gray-400 fill-gray-400 drop-shadow-[0_0_5px_rgba(156,163,175,0.7)]" />}
+                                {button.type === 'blast' && <Bomb className="h-64 w-64 text-destructive" />}
                             </Button>
                        ))}
+                       {clickEffects.map(effect => (
+                          <div
+                              key={effect.id}
+                              className={effect.type === 'blast' ? 'blast-effect' : 'sparkle-effect'}
+                              style={{
+                                  top: `calc(${effect.y}% + 160px)`,
+                                  left: `calc(${effect.x}% + 160px)`,
+                                  transform: 'translate(-50%, -50%)',
+                              }}
+                          />
+                      ))}
                     </div>
                 </CardContent>
                 <CardFooter className="flex-col gap-4 w-full max-w-sm border-t pt-6">
@@ -518,5 +547,4 @@ export default function DashboardPage() {
       </Tabs>
     </div>
   );
-
-    
+}
