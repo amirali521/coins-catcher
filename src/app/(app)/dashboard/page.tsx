@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Gift, Clock, Coins, CheckCircle, Gamepad2, Star, Bomb } from "lucide-react";
+import { Gift, Clock, Coins, CheckCircle, Gamepad2, Star, Bomb, Zap } from "lucide-react";
 import { BannerAd } from "@/components/ads/banner-ad";
 import FaucetBannerAd from "@/components/ads/faucet-banner-ad";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -34,6 +34,8 @@ interface ClickEffect {
   type: GameButtonType;
 }
 
+const GLOW_CIRCLES = Array.from({ length: 9 }, (_, i) => ({ id: i }));
+type GlowCircleType = 'primary' | 'secondary';
 
 export default function DashboardPage() {
   const { user, claimHourlyReward, claimFaucetReward, claimDailyReward, claimTapTapReward } = useAuth();
@@ -49,7 +51,16 @@ export default function DashboardPage() {
   const [canClaimFaucet, setCanClaimFaucet] = useState(false);
   const [canClaimDaily, setCanClaimDaily] = useState(false);
 
-  // New Game states
+  // Glow Tapper Game states
+  const [glowPoints, setGlowPoints] = useState(0);
+  const [activeGlowCircleId, setActiveGlowCircleId] = useState<number | null>(null);
+  const [activeGlowCircleType, setActiveGlowCircleType] = useState<GlowCircleType>('secondary');
+  const [glowTapperAdClicked, setGlowTapperAdClicked] = useState(false);
+  const glowTapTimestamps = useRef<number[]>([]);
+  const [isGlowPenalized, setIsGlowPenalized] = useState(false);
+  const glowGameTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Coin Catcher Game states
   const [gamePoints, setGamePoints] = useState(0);
   const [gameButtons, setGameButtons] = useState<GameButton[]>([]);
   const [gameAdClicked, setGameAdClicked] = useState(false);
@@ -128,7 +139,30 @@ export default function DashboardPage() {
     };
   }, [faucetPopoverOpen]);
 
-  // Game Loop
+  // Glow Tapper Game Loop
+  const pickNextGlowCircle = useCallback(() => {
+    let nextCircleId;
+    do {
+      nextCircleId = Math.floor(Math.random() * GLOW_CIRCLES.length);
+    } while (nextCircleId === activeGlowCircleId);
+    
+    setActiveGlowCircleId(nextCircleId);
+    // 20% chance for a primary (2-point) circle
+    setActiveGlowCircleType(Math.random() < 0.2 ? 'primary' : 'secondary');
+
+    glowGameTimeoutRef.current = setTimeout(() => {
+        setActiveGlowCircleId(null); // Missed
+    }, 1500); // 1.5 second to click
+  }, [activeGlowCircleId]);
+
+  useEffect(() => {
+    if (activeGlowCircleId === null) {
+      const timer = setTimeout(pickNextGlowCircle, 400); // Wait 0.4s before showing next
+      return () => clearTimeout(timer);
+    }
+  }, [activeGlowCircleId, pickNextGlowCircle]);
+
+  // Coin Catcher Game Loop
   useEffect(() => {
     const gameInterval = setInterval(() => {
         if (gameButtons.length > 11) return; // Max 12 buttons on screen
@@ -231,7 +265,65 @@ export default function DashboardPage() {
       }
   }
 
-  // New Game Logic
+  // Glow Tapper Logic
+  const handleGlowCircleClick = (circleId: number) => {
+    if (isGlowPenalized) return;
+    
+    const now = Date.now();
+    glowTapTimestamps.current = glowTapTimestamps.current.filter(ts => now - ts < 1000);
+    if (glowTapTimestamps.current.length >= 8) {
+      toast({
+        variant: "destructive",
+        title: "Auto-clicker detected!",
+        description: "Tapping disabled for 3 seconds.",
+      });
+      setIsGlowPenalized(true);
+      setTimeout(() => setIsGlowPenalized(false), 3000);
+      return;
+    }
+    glowTapTimestamps.current.push(now);
+
+    if (circleId === activeGlowCircleId) {
+      setGlowPoints(p => p + (activeGlowCircleType === 'primary' ? 2 : 1));
+      setActiveGlowCircleId(null);
+      if (glowGameTimeoutRef.current) {
+          clearTimeout(glowGameTimeoutRef.current);
+      }
+    }
+  };
+
+  const handleGlowTapperClaim = async () => {
+    const mainCoinsToAdd = Math.floor(glowPoints / 20);
+    
+    if (!glowTapperAdClicked) {
+      toast({ variant: 'destructive', title: 'Task not completed', description: 'Please click the link in Step 1 first.' });
+      return;
+    }
+    if (mainCoinsToAdd <= 0) {
+      toast({ variant: 'destructive', title: 'Not enough points', description: 'You need at least 20 points to claim.' });
+      return;
+    }
+
+    try {
+      await claimTapTapReward(mainCoinsToAdd); // Reusing claimTapTapReward as it just adds coins
+      toast({
+        title: '🎉 Glow Tapper Reward Claimed!',
+        description: `You converted ${mainCoinsToAdd * 20} points into ${mainCoinsToAdd} main coins.`,
+      });
+      setGlowPoints(prev => prev % 20); // Keep the remainder
+      setGlowTapperAdClicked(false);
+    } catch (error: any) {
+      console.error("Failed to claim Glow Tapper reward:", error);
+      toast({
+        variant: "destructive",
+        title: "Claim Failed",
+        description: error.message || "There was an issue claiming your reward.",
+      });
+    }
+  };
+
+
+  // Coin Catcher Game Logic
   const handleGameButtonClick = (button: GameButton) => {
     setGameButtons(current => current.filter(b => b.id !== button.id));
 
@@ -310,8 +402,9 @@ export default function DashboardPage() {
       </div>
 
       <Tabs defaultValue="rewards" className="w-full col-span-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="rewards"><Gift className="mr-2 h-4 w-4" />Main Rewards</TabsTrigger>
+            <TabsTrigger value="glow-tapper"><Zap className="mr-2 h-4 w-4" />Glow Tapper</TabsTrigger>
             <TabsTrigger value="game"><Gamepad2 className="mr-2 h-4 w-4" />Coin Catcher</TabsTrigger>
         </TabsList>
         
@@ -466,6 +559,72 @@ export default function DashboardPage() {
               </div>
             </div>
         </TabsContent>
+
+        <TabsContent value="glow-tapper" className="mt-6">
+          <Card className="flex flex-col items-center justify-center text-center">
+              <CardHeader>
+                  <CardTitle>Glow Tapper</CardTitle>
+                  <CardDescription>Click the glowing orbs to score points. Purple is 1 point, Green is 2 points!</CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col items-center gap-4 w-full">
+                  <div className="text-center">
+                      <p className="text-7xl font-bold text-primary flex items-center justify-center gap-2">
+                          <Zap className="h-16 w-16" /> {formatLargeNumber(glowPoints)}
+                      </p>
+                      <p className="text-muted-foreground">Points Scored</p>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4 p-4 w-full max-w-sm aspect-square">
+                    {GLOW_CIRCLES.map((circle) => {
+                       const isActive = circle.id === activeGlowCircleId;
+                       const type = isActive ? activeGlowCircleType : null;
+                       return (
+                          <button
+                            key={circle.id}
+                            disabled={isGlowPenalized}
+                            onClick={() => handleGlowCircleClick(circle.id)}
+                            className={cn(
+                              "aspect-square rounded-full border-2 border-dashed border-border flex items-center justify-center relative transition-all duration-150",
+                              isGlowPenalized ? "cursor-not-allowed" : "cursor-pointer"
+                            )}
+                          >
+                             <div className={cn(
+                                "h-5/6 w-5/6 rounded-full bg-muted/40 transition-colors",
+                                isActive && "bg-background",
+                              )}>
+                             </div>
+                             {isActive && (
+                                <div className={cn("orb-glow", type === 'primary' ? 'orb-glow-primary' : 'orb-glow-secondary')} />
+                             )}
+                          </button>
+                       )
+                    })}
+                  </div>
+              </CardContent>
+              <CardFooter className="flex-col gap-4 w-full max-w-sm border-t pt-6">
+                  <div className="text-sm text-muted-foreground font-semibold">
+                      20 Points = 1 Main Coin
+                  </div>
+                  <Button
+                      className="w-full"
+                      variant={!glowTapperAdClicked ? "outline" : "default"}
+                      onClick={() => {
+                          if (!glowTapperAdClicked) {
+                              window.open('https://www.effectivegatecpm.com/rjxuuya9?key=0ca0a474faa38ad1b07174333d291e37', '_blank');
+                              setGlowTapperAdClicked(true);
+                          } else {
+                              handleGlowTapperClaim();
+                          }
+                      }}
+                      disabled={glowTapperAdClicked && glowPoints < 20}
+                  >
+                      {!glowTapperAdClicked
+                          ? "Step 1: Open Link to Enable Claim"
+                          : `Step 2: Claim ${Math.floor(glowPoints / 20)} Main Coins`
+                      }
+                  </Button>
+              </CardFooter>
+          </Card>
+        </TabsContent>
         
         <TabsContent value="game" className="mt-6">
             <Card className="flex flex-col items-center justify-center text-center">
@@ -551,5 +710,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    

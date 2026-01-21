@@ -131,4 +131,29 @@ body {
   background: radial-gradient(circle, hsl(var(--destructive)/0.7) 0%, hsl(var(--destructive)/0) 70%);
   animation: explode-burst 0.4s ease-out forwards;
 }
-    
+
+@keyframes glow-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.7;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 1;
+  }
+}
+
+.orb-glow {
+  @apply absolute inset-0 rounded-full -z-10;
+  animation: glow-pulse 1.5s infinite ease-in-out;
+}
+
+.orb-glow-primary {
+  background: radial-gradient(circle, hsl(var(--primary) / 0.5) 0%, hsl(var(--primary) / 0) 70%);
+  box-shadow: 0 0 20px 5px hsl(var(--primary) / 0.4);
+}
+
+.orb-glow-secondary {
+  background: radial-gradient(circle, hsl(var(--accent) / 0.6) 0%, hsl(var(--accent) / 0) 70%);
+  box-shadow: 0 0 20px 5px hsl(var(--accent) / 0.5);
+}
