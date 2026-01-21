@@ -307,7 +307,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
         const usersRef = collection(db, 'users');
         const q = query(usersRef, where('displayName', '==', name));
-        const nameQuerySnapshot = await getDocs(qName);
+        const nameQuerySnapshot = await getDocs(q);
         if (!nameQuerySnapshot.empty) {
           throw new Error(`Username "${name}" is already taken. Please choose another one.`);
         }
@@ -762,3 +762,5 @@ export const useAuth = () => {
   return context;
 };
 
+
+    

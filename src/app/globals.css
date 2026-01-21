@@ -131,3 +131,4 @@ body {
   background: radial-gradient(circle, hsl(var(--destructive)/0.7) 0%, hsl(var(--destructive)/0) 70%);
   animation: explode-burst 0.4s ease-out forwards;
 }
+    
