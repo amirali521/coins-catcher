@@ -34,7 +34,7 @@ export default function ReferralsPage() {
   const [referredUsers, setReferredUsers] = useState<ReferredUser[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const referralLink = `https://coincatcher.app/auth/signup?ref=${user?.referralCode}`;
+  const referralLink = `https://coins-catcher.vercel.app/auth/signup?ref=${user?.referralCode}`;
 
   useEffect(() => {
     if (!user?.uid) {
@@ -196,5 +196,3 @@ export default function ReferralsPage() {
     </div>
   );
 }
-
-    
