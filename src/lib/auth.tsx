@@ -39,7 +39,6 @@ interface User {
   lastTapTapClaimDate: { seconds: number; nanoseconds: number; } | null;
   taptapLevel: number;
   taptapStreak: number;
-  lastTaptapFullClaimDate: { seconds: number; nanoseconds: number; } | null;
   pubgId?: string;
   pubgName?: string;
   freefireId?: string;
@@ -192,7 +191,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               lastTapTapClaimDate: userData.lastTapTapClaimDate || null,
               taptapLevel: userData.taptapLevel || 1,
               taptapStreak: userData.taptapStreak || 0,
-              lastTaptapFullClaimDate: userData.lastTaptapFullClaimDate || null,
               pubgId: userData.pubgId,
               pubgName: userData.pubgName,
               freefireId: userData.freefireId,
@@ -307,7 +305,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         lastTapTapClaimDate: null,
         taptapLevel: 1,
         taptapStreak: 0,
-        lastTaptapFullClaimDate: null,
       });
       await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
     }
@@ -369,7 +366,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           lastTapTapClaimDate: null,
           taptapLevel: 1,
           taptapStreak: 0,
-          lastTaptapFullClaimDate: null,
         });
         await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
 
@@ -439,9 +435,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     if (amount <= 0) {
         throw new Error("Claim amount must be positive.");
     }
-    const TAPTAP_LEVELS = [1000, 1500, 2000];
-    const MAX_LEVEL = TAPTAP_LEVELS.length;
-
+    const TAPTAP_DAILY_LIMIT = 1000;
     let claimedAmount = 0;
 
     await runTransaction(db, async (transaction) => {
@@ -450,69 +444,54 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         if (!userDoc.exists()) throw new Error("User data not found.");
 
         const userData = userDoc.data();
-        let { 
-            taptapClaimsToday = 0, 
+        const {
+            taptapClaimsToday = 0,
             lastTapTapClaimDate,
             taptapLevel = 1,
             taptapStreak = 0,
-            lastTaptapFullClaimDate
         } = userData;
 
         const lastClaimDate = lastTapTapClaimDate ? new Date(lastTapTapClaimDate.seconds * 1000) : null;
-        if (lastClaimDate && !isToday(lastClaimDate)) {
-            taptapClaimsToday = 0;
-        }
-
-        const lastFullClaimDate = lastTaptapFullClaimDate ? new Date(lastTaptapFullClaimDate.seconds * 1000) : null;
+        let dailyClaims = taptapClaimsToday;
         
-        // Level down logic: Check if a day was skipped since the last full claim
-        if (lastFullClaimDate && !isToday(lastFullClaimDate) && !isYesterday(lastFullClaimDate)) {
-             taptapLevel = Math.max(1, taptapLevel - 1);
-             taptapStreak = 0; // Reset streak on level down
+        const updates: any = {};
+
+        // If it's a new day, reset daily claims and handle streak
+        if (!lastClaimDate || !isToday(lastClaimDate)) {
+            dailyClaims = 0;
+
+            if (lastClaimDate && isYesterday(lastClaimDate)) {
+                // Continue streak
+                const newStreak = taptapStreak + 1;
+                if (newStreak >= 7) {
+                    updates.taptapLevel = taptapLevel + 1;
+                    updates.taptapStreak = 0; // Reset streak
+                } else {
+                    updates.taptapStreak = newStreak;
+                }
+            } else {
+                // First claim ever or streak broken
+                updates.taptapStreak = 1;
+            }
         }
 
-        const dailyLimit = TAPTAP_LEVELS[taptapLevel - 1] || 1000;
-
-        if (taptapClaimsToday >= dailyLimit) {
-            throw new Error(`You have reached your daily TapTap claim limit of ${dailyLimit} coins.`);
+        if (dailyClaims >= TAPTAP_DAILY_LIMIT) {
+            throw new Error(`You have reached your daily TapTap claim limit of ${TAPTAP_DAILY_LIMIT} coins.`);
         }
 
-        claimedAmount = Math.min(amount, dailyLimit - taptapClaimsToday);
+        claimedAmount = Math.min(amount, TAPTAP_DAILY_LIMIT - dailyClaims);
         
         if (claimedAmount <= 0) {
-             throw new Error(`You have reached your daily TapTap claim limit of ${dailyLimit} coins.`);
+             throw new Error(`You have already reached your daily claim limit.`);
         }
 
-        const newTotalClaimsToday = taptapClaimsToday + claimedAmount;
-        const updates: any = {
-            coins: increment(claimedAmount),
-            taptapClaimsToday: newTotalClaimsToday,
-            lastTapTapClaimDate: serverTimestamp(),
-            taptapLevel: taptapLevel,
-            taptapStreak: taptapStreak,
-        };
-
-        // Level up logic: Check if daily limit was reached
-        if (newTotalClaimsToday >= dailyLimit) {
-            const lastFullDate = lastTaptapFullClaimDate ? new Date(lastTaptapFullClaimDate.seconds * 1000) : null;
-            let newStreak = taptapStreak;
-
-            if (lastFullDate && isYesterday(lastFullDate)) {
-                newStreak = taptapStreak + 1;
-            } else if (!lastFullDate || !isToday(lastFullDate)) {
-                newStreak = 1;
-            }
-            updates.taptapStreak = newStreak;
-            updates.lastTaptapFullClaimDate = serverTimestamp();
-
-            if (newStreak >= 7) {
-                updates.taptapLevel = Math.min(MAX_LEVEL, taptapLevel + 1);
-                updates.taptapStreak = 0;
-            }
-        }
+        updates.coins = increment(claimedAmount);
+        updates.taptapClaimsToday = dailyClaims + claimedAmount;
+        updates.lastTapTapClaimDate = serverTimestamp();
         
         transaction.update(userRef, updates);
 
+        // Add transaction log
         const transRef = doc(collection(db, 'users', user.uid, 'transactions'));
         transaction.set(transRef, {
             type: 'claim',
@@ -523,7 +502,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     });
     
     return { claimedAmount };
-
   }, [user]);
 
   const DAILY_REWARDS = [15, 30, 45, 60, 75, 90, 120];
@@ -870,3 +848,5 @@ export const useAuth = () => {
   }
   return context;
 };
+
+    

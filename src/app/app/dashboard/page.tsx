@@ -20,7 +20,7 @@ const HOURLY_CLAIM_AMOUNT = 100;
 const FAUCET_CLAIM_COOLDOWN_HOURS = 3;
 const FAUCET_CLAIM_AMOUNT = 50;
 const DAILY_REWARDS = [15, 30, 45, 60, 75, 90, 120];
-const TAPTAP_LEVELS = [1000, 1500, 2000];
+const TAPTAP_DAILY_LIMIT = 1000;
 
 
 // Game Types
@@ -390,7 +390,7 @@ export default function DashboardPage() {
   } else {
       nextClaimDay = currentStreak + 1;
   }
-  const taptapDailyLimit = user ? TAPTAP_LEVELS[user.taptapLevel - 1] || 1000 : 1000;
+  const taptapDailyLimit = TAPTAP_DAILY_LIMIT;
   const taptapLimitReached = taptapClaimsToday >= taptapDailyLimit;
 
   return (
@@ -566,7 +566,7 @@ export default function DashboardPage() {
                     <CardDescription>
                         Tap the gem to mine TapTap Coins. Claim them to convert to main coins!
                         <br />
-                        Maintain a streak of claiming your full daily limit to increase it.
+                        Claim from the miner for 7 consecutive days to increase your Level.
                     </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col items-center gap-6">
@@ -719,3 +719,5 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+    
