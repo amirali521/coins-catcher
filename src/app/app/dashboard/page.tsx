@@ -12,12 +12,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { isToday } from "date-fns";
 import { cn, formatLargeNumber } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
 
 const HOURLY_CLAIM_COOLDOWN_HOURS = 3;
 const HOURLY_CLAIM_AMOUNT = 100;
 const FAUCET_CLAIM_COOLDOWN_HOURS = 3;
 const FAUCET_CLAIM_AMOUNT = 50;
 const DAILY_REWARDS = [15, 30, 45, 60, 75, 90, 120];
+const TAPTAP_DAILY_LIMIT = 1000;
+
 
 // Game Types
 type GameButtonType = 'gold' | 'silver' | 'blast';
@@ -36,7 +39,7 @@ interface ClickEffect {
 
 
 export default function DashboardPage() {
-  const { user, claimHourlyReward, claimFaucetReward, claimDailyReward, claimTapTapReward } = useAuth();
+  const { user, claimHourlyReward, claimFaucetReward, claimDailyReward, claimTapTapReward, claimGameReward } = useAuth();
   const { toast } = useToast();
   const [faucetPopoverOpen, setFaucetPopoverOpen] = useState(false);
   const [faucetAdClicked, setFaucetAdClicked] = useState(false);
@@ -55,6 +58,7 @@ export default function DashboardPage() {
   const [tapTapAdClicked, setTapTapAdClicked] = useState(false);
   const tapTimestamps = useRef<number[]>([]);
   const [isPenalized, setIsPenalized] = useState(false);
+  const [taptapClaimsToday, setTaptapClaimsToday] = useState(0);
 
   // Coin Catcher Game states
   const [gamePoints, setGamePoints] = useState(0);
@@ -62,6 +66,14 @@ export default function DashboardPage() {
   const [gameAdClicked, setGameAdClicked] = useState(false);
   const [clickEffects, setClickEffects] = useState<ClickEffect[]>([]);
   const gameBoardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+      if (user?.lastTapTapClaimDate && isToday(new Date(user.lastTapTapClaimDate.seconds * 1000))) {
+          setTaptapClaimsToday(user.taptapClaimsToday || 0);
+      } else {
+          setTaptapClaimsToday(0);
+      }
+  }, [user]);
 
 
   const calculateCooldowns = useCallback(() => {
@@ -282,19 +294,26 @@ export default function DashboardPage() {
     }
 
     try {
-      await claimTapTapReward(mainCoinsToAdd);
-      toast({
-        title: '🎉 TapTap Reward Claimed!',
-        description: `You converted ${mainCoinsToAdd * 20} TapTap Coins into ${mainCoinsToAdd} main coins.`,
-      });
-      setTapTapCoins(prev => prev % 20); // Keep the remainder
+      const { claimedAmount } = await claimTapTapReward(mainCoinsToAdd);
+       if (claimedAmount < mainCoinsToAdd) {
+            toast({
+                title: '🎉 Daily Limit Reached!',
+                description: `You claimed ${claimedAmount} coins. The rest of your TapTap coins are still available to claim tomorrow.`,
+            });
+        } else {
+            toast({
+                title: '🎉 TapTap Reward Claimed!',
+                description: `You converted ${claimedAmount * 20} TapTap Coins into ${claimedAmount} main coins.`,
+            });
+        }
+      setTapTapCoins(prev => prev - (claimedAmount * 20)); // Deduct only what was claimed
       setTapTapAdClicked(false);
     } catch (error: any) {
       console.error("Failed to claim TapTap reward:", error);
       toast({
         variant: "destructive",
         title: "Claim Failed",
-        description: error.message || "There was an issue claiming your reward.",
+        description: error.message,
       });
     }
   };
@@ -342,7 +361,7 @@ export default function DashboardPage() {
     }
 
     try {
-      await claimTapTapReward(mainCoinsToAdd); 
+      await claimGameReward(mainCoinsToAdd, 'Coin Catcher'); 
       toast({
         title: '🎉 Game Reward Claimed!',
         description: `You converted ${mainCoinsToAdd * 10} points into ${mainCoinsToAdd} main coins.`,
@@ -370,6 +389,7 @@ export default function DashboardPage() {
   } else {
       nextClaimDay = currentStreak + 1;
   }
+  const taptapLimitReached = taptapClaimsToday >= TAPTAP_DAILY_LIMIT;
 
   return (
     <div className="grid gap-6">
@@ -569,6 +589,12 @@ export default function DashboardPage() {
                     <div className="text-sm text-muted-foreground font-semibold">
                         20 TapTap Coins = 1 Main Coin
                     </div>
+                    <div className="w-full space-y-2">
+                         <div className="text-sm text-muted-foreground font-semibold w-full text-left">
+                            Daily Claim Limit: {formatLargeNumber(taptapClaimsToday)} / {formatLargeNumber(TAPTAP_DAILY_LIMIT)}
+                        </div>
+                        <Progress value={(taptapClaimsToday / TAPTAP_DAILY_LIMIT) * 100} className="w-full" />
+                    </div>
                     <Button
                         className="w-full"
                         variant={!tapTapAdClicked ? "outline" : "default"}
@@ -580,10 +606,12 @@ export default function DashboardPage() {
                                 handleTapTapClaim();
                             }
                         }}
-                        disabled={tapTapAdClicked && tapTapCoins < 20}
+                        disabled={taptapLimitReached || (tapTapAdClicked && tapTapCoins < 20)}
                     >
                         {!tapTapAdClicked
                             ? "Step 1: Open Link to Enable Claim"
+                            : taptapLimitReached
+                            ? "Daily Limit Reached"
                             : `Step 2: Claim ${Math.floor(tapTapCoins / 20)} Main Coins`
                         }
                     </Button>
