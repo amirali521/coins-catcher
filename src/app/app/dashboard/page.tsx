@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -5,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Gift, Clock, Coins, CheckCircle, Gamepad2, Star, Bomb, Hand, Gem } from "lucide-react";
+import { Gift, Clock, Coins, CheckCircle, Gamepad2, Star, Bomb, Hand, Gem, Flame } from "lucide-react";
 import { BannerAd } from "@/components/ads/banner-ad";
 import FaucetBannerAd from "@/components/ads/faucet-banner-ad";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -19,7 +20,7 @@ const HOURLY_CLAIM_AMOUNT = 100;
 const FAUCET_CLAIM_COOLDOWN_HOURS = 3;
 const FAUCET_CLAIM_AMOUNT = 50;
 const DAILY_REWARDS = [15, 30, 45, 60, 75, 90, 120];
-const TAPTAP_DAILY_LIMIT = 1000;
+const TAPTAP_LEVELS = [1000, 1500, 2000];
 
 
 // Game Types
@@ -389,7 +390,8 @@ export default function DashboardPage() {
   } else {
       nextClaimDay = currentStreak + 1;
   }
-  const taptapLimitReached = taptapClaimsToday >= TAPTAP_DAILY_LIMIT;
+  const taptapDailyLimit = user ? TAPTAP_LEVELS[user.taptapLevel - 1] || 1000 : 1000;
+  const taptapLimitReached = taptapClaimsToday >= taptapDailyLimit;
 
   return (
     <div className="grid gap-6">
@@ -561,7 +563,11 @@ export default function DashboardPage() {
             <Card className="flex flex-col items-center justify-center text-center">
                 <CardHeader>
                     <CardTitle>TapTap Miner</CardTitle>
-                    <CardDescription>Tap the gem to mine TapTap Coins. Claim them to convert to main coins!</CardDescription>
+                    <CardDescription>
+                        Tap the gem to mine TapTap Coins. Claim them to convert to main coins!
+                        <br />
+                        Maintain a streak of claiming your full daily limit to increase it.
+                    </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-col items-center gap-6">
                     <div className="text-center">
@@ -589,11 +595,21 @@ export default function DashboardPage() {
                     <div className="text-sm text-muted-foreground font-semibold">
                         20 TapTap Coins = 1 Main Coin
                     </div>
+                    <div className="flex justify-between w-full text-sm font-medium text-muted-foreground px-1">
+                        <div className="flex items-center gap-1">
+                            <Flame className="h-4 w-4 text-orange-500" />
+                            <span>Level: {user?.taptapLevel || 1}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <Star className="h-4 w-4 text-yellow-400" />
+                            <span>Streak: {user?.taptapStreak || 0}/7 days</span>
+                        </div>
+                    </div>
                     <div className="w-full space-y-2">
                          <div className="text-sm text-muted-foreground font-semibold w-full text-left">
-                            Daily Claim Limit: {formatLargeNumber(taptapClaimsToday)} / {formatLargeNumber(TAPTAP_DAILY_LIMIT)}
+                            Daily Claim Limit: {formatLargeNumber(taptapClaimsToday)} / {formatLargeNumber(taptapDailyLimit)}
                         </div>
-                        <Progress value={(taptapClaimsToday / TAPTAP_DAILY_LIMIT) * 100} className="w-full" />
+                        <Progress value={(taptapClaimsToday / taptapDailyLimit) * 100} className="w-full" />
                     </div>
                     <Button
                         className="w-full"

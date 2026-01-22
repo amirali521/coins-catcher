@@ -37,6 +37,9 @@ interface User {
   lastFaucetClaimTimestamp?: { seconds: number; nanoseconds: number; } | null;
   taptapClaimsToday: number;
   lastTapTapClaimDate: { seconds: number; nanoseconds: number; } | null;
+  taptapLevel: number;
+  taptapStreak: number;
+  lastTaptapFullClaimDate: { seconds: number; nanoseconds: number; } | null;
   pubgId?: string;
   pubgName?: string;
   freefireId?: string;
@@ -187,6 +190,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               lastFaucetClaimTimestamp: userData.lastFaucetClaimTimestamp || null,
               taptapClaimsToday: userData.taptapClaimsToday || 0,
               lastTapTapClaimDate: userData.lastTapTapClaimDate || null,
+              taptapLevel: userData.taptapLevel || 1,
+              taptapStreak: userData.taptapStreak || 0,
+              lastTaptapFullClaimDate: userData.lastTaptapFullClaimDate || null,
               pubgId: userData.pubgId,
               pubgName: userData.pubgName,
               freefireId: userData.freefireId,
@@ -299,6 +305,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         lastFaucetClaimTimestamp: null,
         taptapClaimsToday: 0,
         lastTapTapClaimDate: null,
+        taptapLevel: 1,
+        taptapStreak: 0,
+        lastTaptapFullClaimDate: null,
       });
       await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
     }
@@ -358,6 +367,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           lastFaucetClaimTimestamp: null,
           taptapClaimsToday: 0,
           lastTapTapClaimDate: null,
+          taptapLevel: 1,
+          taptapStreak: 0,
+          lastTaptapFullClaimDate: null,
         });
         await addTransaction(fbUser.uid, 'welcome-bonus', initialCoins, 'Welcome bonus');
 
@@ -423,53 +435,94 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [user]);
 
   const claimTapTapReward = useCallback(async (amount: number) => {
-      if (!user) throw new Error("User not authenticated.");
-      if (amount <= 0) {
-          throw new Error("Claim amount must be positive.");
-      }
+    if (!user) throw new Error("User not authenticated.");
+    if (amount <= 0) {
+        throw new Error("Claim amount must be positive.");
+    }
+    const TAPTAP_LEVELS = [1000, 1500, 2000];
+    const MAX_LEVEL = TAPTAP_LEVELS.length;
 
-      let claimedAmount = 0;
+    let claimedAmount = 0;
 
-      await runTransaction(db, async (transaction) => {
-          const userRef = doc(db, 'users', user.uid);
-          const userDoc = await transaction.get(userRef);
-          if (!userDoc.exists()) throw new Error("User data not found.");
+    await runTransaction(db, async (transaction) => {
+        const userRef = doc(db, 'users', user.uid);
+        const userDoc = await transaction.get(userRef);
+        if (!userDoc.exists()) throw new Error("User data not found.");
 
-          const userData = userDoc.data();
-          let claimsToday = userData.taptapClaimsToday || 0;
-          const lastClaimDate = userData.lastTapTapClaimDate ? new Date(userData.lastTapTapClaimDate.seconds * 1000) : null;
+        const userData = userDoc.data();
+        let { 
+            taptapClaimsToday = 0, 
+            lastTapTapClaimDate,
+            taptapLevel = 1,
+            taptapStreak = 0,
+            lastTaptapFullClaimDate
+        } = userData;
 
-          if (lastClaimDate && !isToday(lastClaimDate)) {
-              claimsToday = 0;
-          }
-          
-          const DAILY_LIMIT = 1000;
-          if (claimsToday >= DAILY_LIMIT) {
-              throw new Error(`You have reached your daily TapTap claim limit of ${DAILY_LIMIT} coins.`);
-          }
+        const lastClaimDate = lastTapTapClaimDate ? new Date(lastTapTapClaimDate.seconds * 1000) : null;
+        if (lastClaimDate && !isToday(lastClaimDate)) {
+            taptapClaimsToday = 0;
+        }
 
-          claimedAmount = Math.min(amount, DAILY_LIMIT - claimsToday);
-          
-          if (claimedAmount <= 0) {
-               throw new Error(`You have reached your daily TapTap claim limit of ${DAILY_LIMIT} coins.`);
-          }
+        const lastFullClaimDate = lastTaptapFullClaimDate ? new Date(lastTaptapFullClaimDate.seconds * 1000) : null;
+        
+        // Level down logic: Check if a day was skipped since the last full claim
+        if (lastFullClaimDate && !isToday(lastFullClaimDate) && !isYesterday(lastFullClaimDate)) {
+             taptapLevel = Math.max(1, taptapLevel - 1);
+             taptapStreak = 0; // Reset streak on level down
+        }
 
-          transaction.update(userRef, {
-              coins: increment(claimedAmount),
-              taptapClaimsToday: claimsToday + claimedAmount,
-              lastTapTapClaimDate: serverTimestamp(),
-          });
+        const dailyLimit = TAPTAP_LEVELS[taptapLevel - 1] || 1000;
 
-          const transRef = doc(collection(db, 'users', user.uid, 'transactions'));
-          transaction.set(transRef, {
-              type: 'claim',
-              amount: claimedAmount,
-              description: 'TapTap Miner reward',
-              date: serverTimestamp(),
-          });
-      });
-      
-      return { claimedAmount };
+        if (taptapClaimsToday >= dailyLimit) {
+            throw new Error(`You have reached your daily TapTap claim limit of ${dailyLimit} coins.`);
+        }
+
+        claimedAmount = Math.min(amount, dailyLimit - taptapClaimsToday);
+        
+        if (claimedAmount <= 0) {
+             throw new Error(`You have reached your daily TapTap claim limit of ${dailyLimit} coins.`);
+        }
+
+        const newTotalClaimsToday = taptapClaimsToday + claimedAmount;
+        const updates: any = {
+            coins: increment(claimedAmount),
+            taptapClaimsToday: newTotalClaimsToday,
+            lastTapTapClaimDate: serverTimestamp(),
+            taptapLevel: taptapLevel,
+            taptapStreak: taptapStreak,
+        };
+
+        // Level up logic: Check if daily limit was reached
+        if (newTotalClaimsToday >= dailyLimit) {
+            const lastFullDate = lastTaptapFullClaimDate ? new Date(lastTaptapFullClaimDate.seconds * 1000) : null;
+            let newStreak = taptapStreak;
+
+            if (lastFullDate && isYesterday(lastFullDate)) {
+                newStreak = taptapStreak + 1;
+            } else if (!lastFullDate || !isToday(lastFullDate)) {
+                newStreak = 1;
+            }
+            updates.taptapStreak = newStreak;
+            updates.lastTaptapFullClaimDate = serverTimestamp();
+
+            if (newStreak >= 7) {
+                updates.taptapLevel = Math.min(MAX_LEVEL, taptapLevel + 1);
+                updates.taptapStreak = 0;
+            }
+        }
+        
+        transaction.update(userRef, updates);
+
+        const transRef = doc(collection(db, 'users', user.uid, 'transactions'));
+        transaction.set(transRef, {
+            type: 'claim',
+            amount: claimedAmount,
+            description: 'TapTap Miner reward',
+            date: serverTimestamp(),
+        });
+    });
+    
+    return { claimedAmount };
 
   }, [user]);
 
