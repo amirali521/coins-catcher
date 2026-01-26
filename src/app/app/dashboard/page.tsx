@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
@@ -6,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
-import { Gift, Clock, Coins, CheckCircle, Gamepad2, Star, Bomb, Hand, Gem, Flame } from "lucide-react";
+import { Gift, Clock, Coins, CheckCircle, Gamepad2, Star, Bomb, Hand, Gem, Flame, Loader2 } from "lucide-react";
 import { BannerAd } from "@/components/ads/banner-ad";
 import FaucetBannerAd from "@/components/ads/faucet-banner-ad";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -44,6 +43,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const [faucetPopoverOpen, setFaucetPopoverOpen] = useState(false);
   const [faucetAdClicked, setFaucetAdClicked] = useState(false);
+  const [isClaiming, setIsClaiming] = useState<string | null>(null);
 
   // Core reward states
   const [hourlyTimeLeft, setHourlyTimeLeft] = useState<number | null>(null);
@@ -185,69 +185,74 @@ export default function DashboardPage() {
   };
 
   const handleHourlyClaim = async () => {
-    if (canClaimHourly && user) {
-      if (!hourlyAdLinkClicked) {
-        window.open('https://www.effectivegatecpm.com/rjxuuya9?key=0ca0a474faa38ad1b07174333d291e37', '_blank');
-        setHourlyAdLinkClicked(true);
-        return;
-      }
-
-      try {
-        await claimHourlyReward(HOURLY_CLAIM_AMOUNT);
-        toast({
-          title: "🎉 Reward Claimed!",
-          description: `You have received ${HOURLY_CLAIM_AMOUNT} coins.`,
-        });
-        setHourlyAdLinkClicked(false);
-      } catch (error) {
-        console.error("Failed to claim reward:", error);
-        toast({
-            variant: "destructive",
-            title: "Claim Failed",
-            description: "There was an issue claiming your reward. Please try again later.",
-        });
-      }
+    if (isClaiming || !canClaimHourly || !user) return;
+    if (!hourlyAdLinkClicked) {
+      window.open('https://www.effectivegatecpm.com/rjxuuya9?key=0ca0a474faa38ad1b07174333d291e37', '_blank');
+      setHourlyAdLinkClicked(true);
+      return;
+    }
+    setIsClaiming('hourly');
+    try {
+      await claimHourlyReward(HOURLY_CLAIM_AMOUNT);
+      toast({
+        title: "🎉 Reward Claimed!",
+        description: `You have received ${HOURLY_CLAIM_AMOUNT} coins.`,
+      });
+      setHourlyAdLinkClicked(false);
+    } catch (error) {
+      console.error("Failed to claim reward:", error);
+      toast({
+          variant: "destructive",
+          title: "Claim Failed",
+          description: "There was an issue claiming your reward. Please try again later.",
+      });
+    } finally {
+        setIsClaiming(null);
     }
   };
 
   const handleFaucetClaim = async () => {
-    if (user && faucetAdClicked && canClaimFaucet) {
-      try {
-        await claimFaucetReward(FAUCET_CLAIM_AMOUNT);
-        toast({
-          title: "🎉 Faucet Reward Claimed!",
-          description: `You have received ${FAUCET_CLAIM_AMOUNT} coins.`,
-        });
-        setFaucetPopoverOpen(false);
-        setTimeout(() => {
-          setFaucetAdClicked(false);
-        }, 100);
-      } catch (error: any) {
-        console.error("Failed to claim faucet reward:", error);
-        toast({
-            variant: "destructive",
-            title: "Claim Failed",
-            description: error.message || "There was an issue claiming your reward. Please try again later.",
-        });
-      }
+    if (isClaiming || !user || !faucetAdClicked || !canClaimFaucet) return;
+    setIsClaiming('faucet');
+    try {
+      await claimFaucetReward(FAUCET_CLAIM_AMOUNT);
+      toast({
+        title: "🎉 Faucet Reward Claimed!",
+        description: `You have received ${FAUCET_CLAIM_AMOUNT} coins.`,
+      });
+      setFaucetPopoverOpen(false);
+      setTimeout(() => {
+        setFaucetAdClicked(false);
+      }, 100);
+    } catch (error: any) {
+      console.error("Failed to claim faucet reward:", error);
+      toast({
+          variant: "destructive",
+          title: "Claim Failed",
+          description: error.message || "There was an issue claiming your reward. Please try again later.",
+      });
+    } finally {
+        setIsClaiming(null);
     }
   };
 
   const handleDailyClaim = async () => {
-      if(user && canClaimDaily) {
-          try {
-              const { amount, newStreak } = await claimDailyReward();
-              toast({
-                  title: `🎉 Day ${newStreak} Reward Claimed!`,
-                  description: `You received ${amount} coins. Keep up the streak!`,
-              });
-          } catch(error: any) {
-              toast({
-                variant: "destructive",
-                title: "Claim Failed",
-                description: error.message || "Could not claim daily reward.",
-              });
-          }
+      if(isClaiming || !user || !canClaimDaily) return;
+      setIsClaiming('daily');
+      try {
+          const { amount, newStreak } = await claimDailyReward();
+          toast({
+              title: `🎉 Day ${newStreak} Reward Claimed!`,
+              description: `You received ${amount} coins. Keep up the streak!`,
+          });
+      } catch(error: any) {
+          toast({
+            variant: "destructive",
+            title: "Claim Failed",
+            description: error.message || "Could not claim daily reward.",
+          });
+      } finally {
+        setIsClaiming(null);
       }
   }
 
@@ -283,6 +288,7 @@ export default function DashboardPage() {
   };
 
   const handleTapTapClaim = async () => {
+    if (isClaiming) return;
     const mainCoinsToAdd = Math.floor(tapTapCoins / 20);
     
     if (!tapTapAdClicked) {
@@ -294,6 +300,7 @@ export default function DashboardPage() {
       return;
     }
 
+    setIsClaiming('taptap');
     try {
       const { claimedAmount } = await claimTapTapReward(mainCoinsToAdd);
        if (claimedAmount < mainCoinsToAdd) {
@@ -316,6 +323,8 @@ export default function DashboardPage() {
         title: "Claim Failed",
         description: error.message,
       });
+    } finally {
+        setIsClaiming(null);
     }
   };
 
@@ -350,6 +359,7 @@ export default function DashboardPage() {
   }
 
   const handleGameClaim = async () => {
+    if (isClaiming) return;
     const mainCoinsToAdd = Math.floor(gamePoints / 10);
     
     if (!gameAdClicked) {
@@ -360,7 +370,8 @@ export default function DashboardPage() {
       toast({ variant: 'destructive', title: 'Not enough points', description: 'You need at least 10 points to claim.' });
       return;
     }
-
+    
+    setIsClaiming('game');
     try {
       await claimGameReward(mainCoinsToAdd, 'Coin Catcher'); 
       toast({
@@ -376,6 +387,8 @@ export default function DashboardPage() {
         title: "Claim Failed",
         description: error.message || "There was an issue claiming your reward.",
       });
+    } finally {
+        setIsClaiming(null);
     }
   };
 
@@ -442,9 +455,14 @@ export default function DashboardPage() {
                     size="lg"
                     className="w-full max-w-xs text-lg py-6 transition-transform duration-200 hover:scale-105"
                     onClick={handleHourlyClaim}
-                    disabled={!canClaimHourly}
+                    disabled={!canClaimHourly || !!isClaiming}
                   >
-                    {canClaimHourly ? (hourlyAdLinkClicked ? 'Confirm Claim' : 'Claim Now') : "Come Back Later"}
+                    {isClaiming === 'hourly' ? (
+                        <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Claiming...
+                        </>
+                    ) : canClaimHourly ? (hourlyAdLinkClicked ? 'Confirm Claim' : 'Claim Now') : "Come Back Later"}
                   </Button>
                 </CardContent>
               </Card>
@@ -498,9 +516,13 @@ export default function DashboardPage() {
                         size="lg"
                         className="w-full mt-6"
                         onClick={handleDailyClaim}
-                        disabled={!canClaimDaily}
+                        disabled={!canClaimDaily || !!isClaiming}
                     >
-                        {canClaimDaily ? `Claim Day ${nextClaimDay} Reward` : "Come back tomorrow"}
+                        {isClaiming === 'daily' && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {isClaiming === 'daily'
+                            ? 'Claiming...'
+                            : canClaimDaily ? `Claim Day ${nextClaimDay} Reward` : "Come back tomorrow"
+                        }
                     </Button>
                 </CardContent>
               </Card>
@@ -538,9 +560,11 @@ export default function DashboardPage() {
                                 <div className="flex justify-center">
                                     <FaucetBannerAd />
                                 </div>
-                                <Button onClick={handleFaucetClaim} disabled={!faucetAdClicked || !canClaimFaucet}>
-                                    <Gift className="mr-2 h-4 w-4" />
-                                    {!canClaimFaucet
+                                <Button onClick={handleFaucetClaim} disabled={!faucetAdClicked || !canClaimFaucet || !!isClaiming}>
+                                    {isClaiming === 'faucet' ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Gift className="mr-2 h-4 w-4" />}
+                                    {isClaiming === 'faucet'
+                                        ? 'Claiming...'
+                                        : !canClaimFaucet
                                         ? `Claim in ${formatTime(faucetTimeLeft)}`
                                         : faucetAdClicked 
                                             ? `Claim ${FAUCET_CLAIM_AMOUNT} Coins`
@@ -622,9 +646,14 @@ export default function DashboardPage() {
                                 handleTapTapClaim();
                             }
                         }}
-                        disabled={taptapLimitReached || (tapTapAdClicked && tapTapCoins < 20)}
+                        disabled={taptapLimitReached || (tapTapAdClicked && tapTapCoins < 20) || !!isClaiming}
                     >
-                        {!tapTapAdClicked
+                        {isClaiming === 'taptap' ? (
+                             <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Claiming...
+                             </>
+                        ) :!tapTapAdClicked
                             ? "Step 1: Open Link to Enable Claim"
                             : taptapLimitReached
                             ? "Daily Limit Reached"
@@ -705,9 +734,14 @@ export default function DashboardPage() {
                                 handleGameClaim();
                             }
                         }}
-                        disabled={gameAdClicked && gamePoints < 10}
+                        disabled={(gameAdClicked && gamePoints < 10) || !!isClaiming}
                     >
-                        {!gameAdClicked
+                        {isClaiming === 'game' ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Claiming...
+                            </>
+                        ) : !gameAdClicked
                             ? "Step 1: Open Link to Enable Claim"
                             : `Step 2: Claim ${Math.floor(gamePoints / 10)} Main Coins`
                         }
@@ -719,5 +753,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-    
